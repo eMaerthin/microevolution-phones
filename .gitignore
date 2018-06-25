@@ -1,3 +1,11 @@
+#ignore data/ except for cfg files
+data/*
+!data/**/*.cfg
+!data/*.md
+
+## Bottom of the file is just python template from github:
+## Please update only the part above this comment
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
