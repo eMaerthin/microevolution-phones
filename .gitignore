@@ -1,7 +1,9 @@
-#ignore data/ except for cfg files
+#ignore data/ except for md,txt,cfg files
 data/*
 !data/**/*.cfg
 !data/*.md
+!data/**/*.txt
+!data/**/*.md
 
 ## Bottom of the file is just python template from github:
 ## Please update only the part above this comment
