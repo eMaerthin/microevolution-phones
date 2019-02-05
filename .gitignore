@@ -4,6 +4,7 @@ data/**/*.wav
 #!data/*.md
 #!data/**/*.txt
 #!data/**/*.md
+**/*.swp
 
 .DS_Store
 ## Bottom of the file is just python template from github:
