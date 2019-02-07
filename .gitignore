@@ -9,7 +9,7 @@ subjects/**/*.caption
 #!data/**/*.txt
 #!data/**/*.md
 **/*.swp
-
+**/*.wav
 .DS_Store
 ## Bottom of the file is just python template from github:
 ## Please update only the part above this comment
