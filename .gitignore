@@ -1,5 +1,9 @@
 #ignore data/ except for md,txt,cfg files
 data/**/*.wav
+subjects/**/*.mp4
+subjects/**/*.done
+subjects/**/*.caption
+!subjects/**/*.json
 #!data/**/*.cfg
 #!data/*.md
 #!data/**/*.txt

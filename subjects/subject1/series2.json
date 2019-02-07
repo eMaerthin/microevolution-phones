@@ -1,0 +1,19 @@
+{
+   "url": "https://www.youtube.com/watch?v=cse5cCGuHmE",
+   "datatype": "mp4",
+   "record_date": "20.01.2015",
+   "segments": [
+   {
+      "start": "1:20",
+      "stop": "1:01:10"
+   }],
+   "metadata":
+   {
+      "subject": "subject1",
+      "language": "en",
+      "country": "us",
+      "profession": "political",
+      "gender": "male",
+      "age": 53
+   }
+}
