@@ -1,0 +1,18 @@
+{
+   "url": "https://www.youtube.com/watch?v=Zgfi7wnGZlE",
+   "datatype": "mp4",
+   "segments": [
+   {
+      "start": "0:07",
+      "stop": "1:04:53"
+   }],
+   "metadata":
+   {
+      "subject": "subject1",
+      "language": "en",
+      "country": "us",
+      "profession": "political",
+      "gender": "male",
+      "age": 50
+   }
+}
