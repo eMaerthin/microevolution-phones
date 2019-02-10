@@ -87,8 +87,7 @@ def compute_phonemes(segments_path, phonemes_result_path,
     
     return phonemes_result_path
 
-def phoneme_pipeline(series_path, series_json_filename, working_dir, data,
-                     verbose):
+def phoneme_pipeline(series_json_filename, working_dir, data, verbose):
     url = data.get('url')
     datatype = data.get('datatype')
     assert(datatype is not None)
@@ -105,7 +104,8 @@ def phoneme_pipeline(series_path, series_json_filename, working_dir, data,
                                                     verbose)
     wav_path, segments_path = prepare_wav_input(audio_path, datatype, segments,
                                                 verbose)
-    phonemes_result_file = result_phonemes(series_path)
+    phonemes_result_file = result_phonemes(join(working_dir,
+                                                series_json_filename))
     if verbose>0:
         print(f'phonemes result file: {phonemes_result_file}')
     compute_phonemes(segments_path, phonemes_result_file, verbose)

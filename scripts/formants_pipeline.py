@@ -11,7 +11,7 @@ from schemas import *
 def result_formants(json_path):
     return f'{json_path[:-5]}_formants_result.json'
 
-def formants_pipeline(series_path, series_json_filename, working_dir, data,
+def formants_pipeline(series_json_filename, working_dir, data,
                      verbose):
     # TODO
     '''
@@ -26,6 +26,7 @@ def formants_pipeline(series_path, series_json_filename, working_dir, data,
     if metadata is not None:
         lang_code = metadata.get('language')
     '''
+    series_path = join(working_dir, series_json_filename)
     input_audio_path=f'{series_path[:-5]}_audio_segments.wav'
     formants_result_file = result_formants(series_path)
     if verbose>0:
