@@ -1,3 +1,4 @@
+.idea
 #ignore data/ except for md,txt,cfg files
 data/**/*.wav
 subjects/**/*.mp4
