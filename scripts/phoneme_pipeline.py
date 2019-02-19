@@ -19,6 +19,10 @@ class PhonemePipeline(Pipeline):
     def result_filename(json_path):
         return f'{json_path[:-5]}_result.json'
 
+    @staticmethod
+    def filename_prerequisites():
+        return []
+
     def compute_phonemes(self, segments_path, phonemes_result_path,
                          modeldir=MODELDIR):
         @check_if_already_done(phonemes_result_path, self.verbose)

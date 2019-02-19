@@ -17,6 +17,12 @@ class FormantsPipeline(Pipeline):
     def result_filename(json_path):
         return f'{json_path[:-5]}_formants_result.json'
 
+    @staticmethod
+    def filename_prerequisites():
+        def wav_path(json_path):
+            return f'{json_path[:-5]}_audio_segments.wav'
+        return [wav_path]
+
     def pipeline(self, series_json_filename, working_dir, data):
         # TODO
         '''
