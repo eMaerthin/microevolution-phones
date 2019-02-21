@@ -19,7 +19,7 @@ class Pipeline(object):
     def subjects_dir(self):
         return self._subjects_dir
 
-    def pipeline(self, *args, **kwargs):
+    def pipeline(self, series_json_path, series_settings):
         """
         each pipeline has a specific inner part which is called from process_pipeline()
         """
@@ -123,6 +123,7 @@ class Pipeline(object):
             common_settings = load_settings(working_dir, 'common.json', self.verbose)
             for series_json_filename in series:
                 settings = load_settings(working_dir, series_json_filename, self.verbose)
+                series_json_path = join(working_dir, series_json_filename)
                 series_schema = SeriesSchema()
                 data = series_schema.dump(merge_settings(common_settings, settings))
-                self.pipeline(series_json_filename, working_dir, data)
+                self.pipeline(series_json_path, data)

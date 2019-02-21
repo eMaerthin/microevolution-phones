@@ -5,11 +5,14 @@ from pydub import AudioSegment
 from pytube import YouTube
 
 from decorators import check_if_already_done
-from format_converters import to_16k_mono_wav
+from format_converters import get_frame_rate, convert_to_16k_mono_wav, convert_to_mono_wav_original_frame_rate
+
 
 def download_youtube_url(url, datatype, output_path, filename, lang_code,
                          verbose):
     audio_path = join(output_path, f'{filename}.{datatype}')
+    caption_path = join(output_path, f'{filename}.captions')
+
     @check_if_already_done(audio_path, verbose)
     def download_audio(url, datatype, output_path, filename, verbose):
         if verbose > 0:
@@ -21,7 +24,7 @@ def download_youtube_url(url, datatype, output_path, filename, lang_code,
         if verbose > 0:
             print(f'Found valid audio stream: {audio_stream}')
         audio_stream.download(output_path=output_path, filename=filename)
-    caption_path = join(output_path, f'{filename}.captions')
+
     @check_if_already_done(caption_path, verbose)
     def download_caption(url, caption_path, lang_code, verbose):
         yt = YouTube(url)
@@ -38,6 +41,7 @@ def download_youtube_url(url, datatype, output_path, filename, lang_code,
                     print(f'Warning, a caption for lang_code {lang_code} not found')
             except AttributeError:
                 print(f'Attribute error:(')
+
     download_audio(url, datatype, output_path, filename, verbose)
     download_caption(url, caption_path, lang_code, verbose)
     return audio_path, caption_path
@@ -50,6 +54,7 @@ def time_string_to_sec(str):
                    for i,t in enumerate(reversed(time_parts)))
     return sec_time
 
+
 def map_time_string(str, rec_time):
     if str is 'begin':
         return 0.0
@@ -60,6 +65,7 @@ def map_time_string(str, rec_time):
         assert(0 <= sec_time <= rec_time)
         return sec_time
 
+
 def parse_segment(segment, rec_time):
     assert 'start' in segment
     assert 'stop' in segment
@@ -68,14 +74,23 @@ def parse_segment(segment, rec_time):
     mapped_segment = {k: 1000 * map_time_string(v, rec_time) for k, v in segment.items()}
     return mapped_segment
 
-def prepare_wav_input(audio_path, datatype, segments, verbose):
+
+def prepare_wav_input(audio_path, datatype, segments, verbose, use_original_frequency=False):
     wav_path = f'{audio_path[:-3]}wav'
+    if use_original_frequency:
+        wav_path = f'{audio_path[:-4]}_orig_freq.wav'
+    segments_path = f'{wav_path[:-4]}_segments.wav'
+
     @check_if_already_done(wav_path, verbose)
-    def convert_to_wav(audio_path, wav_path, datatype):
-        to_16k_mono_wav(input=audio_path, output=wav_path,
-                        input_format=datatype)
-    
-    segments_path = f'{audio_path[:-4]}_segments.wav'
+    def convert_to_16k_freq_mono_wav(audio_path, wav_path, datatype):
+        convert_to_16k_mono_wav(input=audio_path, output=wav_path,
+                                input_format=datatype)
+
+    @check_if_already_done(wav_path, verbose)
+    def convert_to_original_freq_mono_wav(audio_path, wav_path, datatype):
+        convert_to_mono_wav_original_frame_rate(input=audio_path, output=wav_path,
+                                                input_format=datatype)
+
     @check_if_already_done(segments_path, verbose)
     def filter_segments(wav_path, segments_path, segments):
         recording = AudioSegment.from_wav(wav_path)
@@ -84,8 +99,12 @@ def prepare_wav_input(audio_path, datatype, segments, verbose):
                            for segment in segments]
         empty = AudioSegment.empty()
         filtered_rec = reduce(lambda x, y: x + recording[y['start']:y['stop']],
-                             parsed_segments, empty)
+                              parsed_segments, empty)
         filtered_rec.export(segments_path, format='wav')
-    convert_to_wav(audio_path, wav_path, datatype)
+
+    if use_original_frequency:
+        convert_to_original_freq_mono_wav(audio_path, wav_path, datatype)
+    else:
+        convert_to_16k_freq_mono_wav(audio_path, wav_path, datatype)
     filter_segments(wav_path, segments_path, segments)
     return wav_path, segments_path

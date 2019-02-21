@@ -1,5 +1,5 @@
 import json
-from os.path import join
+from os.path import (dirname, join)
 
 from marshmallow import pprint
 from pocketsphinx.pocketsphinx import Decoder
@@ -86,7 +86,7 @@ class PhonemePipeline(Pipeline):
 
         recognize_phonemes(segments_path, phonemes_result_path, modeldir)
 
-        if self.verbose > 0:
+        if self.verbose > 1:
             schema = PhonemesSchema()
             with open(phonemes_result_path, 'r') as f:
                 print(f' phonemes_result_path: {phonemes_result_path}')
@@ -96,25 +96,23 @@ class PhonemePipeline(Pipeline):
 
         return phonemes_result_path
 
-    def pipeline(self, series_json_filename, working_dir, data):
-        url = data.get('url')
-        datatype = data.get('datatype')
+    def pipeline(self, series_json_path, series_settings):
+        url = series_settings.get('url')
+        datatype = series_settings.get('datatype')
         assert(datatype is not None)
-        segments = data.get('segments')
-        if segments is None:
-            segments = [{'start':'begin', 'stop':'end'}]
-        metadata = data.get('metadata')
+        segments = series_settings.get('segments', [{'start': 'begin', 'stop': 'end'}])
+        metadata = series_settings.get('metadata')
         lang_code = None
-        if metadata is not None:
+        if isinstance(metadata, dict):
             lang_code = metadata.get('language')
-        audio_file_name = f'{series_json_filename[:-5]}_audio'
-        audio_path, caption_path = download_youtube_url(url, datatype, working_dir,
+        audio_file_name = f'{series_json_path[:-5]}_audio'
+        audio_path, caption_path = download_youtube_url(url, datatype,
+                                                        dirname(series_json_path),
                                                         audio_file_name, lang_code,
                                                         self.verbose)
         wav_path, segments_path = prepare_wav_input(audio_path, datatype, segments,
                                                     self.verbose)
-        phonemes_result_file = self.result_filename(join(working_dir,
-                                                         series_json_filename))
+        phonemes_result_file = self.result_filename(series_json_path)
         if self.verbose > 0:
             print(f'phonemes result file: {phonemes_result_file}')
         self.compute_phonemes(segments_path, phonemes_result_file)
