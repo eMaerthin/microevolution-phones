@@ -1,27 +1,31 @@
-
 import ssl
 
 import fire
 
-from formants_pipeline import FormantsPipeline
-from phoneme_pipeline import PhonemePipeline
+from pipeline import Pipeline
+import pipelines
 
 ssl._create_default_https_context = ssl._create_stdlib_context
 
 
-def process_phonemes_pipeline(subjects_homedir = '../subjects/', verbose = 1):
-    pipeline = PhonemePipeline(verbose, subjects_homedir)
+def process_phonemes_pipeline(subjects_homedir='../subjects/', verbose=1):
+    pipeline = Pipeline.subclasses['PhonemePipeline'](verbose, subjects_homedir)
     pipeline.process_pipeline()
 
 
-def process_formants_pipeline(subjects_homedir = '../subjects/', verbose = 1):
-    pipeline = FormantsPipeline(verbose, subjects_homedir)
+def process_formants_pipeline(subjects_homedir='../subjects/', verbose=1):
+    pipeline = Pipeline.subclasses['FormantsPipeline'](verbose, subjects_homedir)
     pipeline.process_pipeline()
 
 
-def run_all_pipelines(subjects_homedir = '../subjects/', verbose = 1):
-    process_phonemes_pipeline(subjects_homedir, verbose)
-    process_formants_pipeline(subjects_homedir, verbose)
+def run_all_pipelines(subjects_homedir='../subjects/', verbose=1):
+    print('here')
+    print(Pipeline.subclasses)
+    for k, v in Pipeline.subclasses.items():
+        print('there')
+        if verbose > 0:
+            print(f'running pipeline {k}')
+        v(verbose, subjects_homedir).process_pipeline()
 
 
 if __name__ == '__main__':

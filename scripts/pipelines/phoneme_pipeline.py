@@ -96,7 +96,7 @@ class PhonemePipeline(Pipeline):
 
         return phonemes_result_path
 
-    def pipeline(self, series_json_path, series_settings):
+    def series_pipeline(self, series_json_path, series_settings):
         url = series_settings.get('url')
         datatype = series_settings.get('datatype')
         assert(datatype is not None)

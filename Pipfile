@@ -9,9 +9,11 @@ python_version = '3.6'
 [packages]
 fire = '*'
 marshmallow = "==3.0.0rc3"
+matplotlib = '*'
 numpy = '*'
 pandas = '*'
 pocketsphinx = '*'
 pydub = '*'
 pytube = '*'
 scipy = '*'
+sklearn = '*'

@@ -41,7 +41,7 @@ class PhonemesSchema(Schema):
     info = fields.Nested(PhonemeInfoSchema, many=True)
 
 
-class FormantsInfoSchema(Schema):
+class FormantsInfoSchema(PhonemeInfoSchema):
     t = fields.Number(validate=lambda t: t >= 0)
     i = fields.Number(validate=lambda t: t >= 0)
     len_t = fields.Number()
@@ -49,8 +49,9 @@ class FormantsInfoSchema(Schema):
     freq_delta = fields.Number()
     max_f = fields.Number()
     N = fields.Number()
-    N_largest_local_max_f = fields
-    info = fields.Nested(PhonemeInfoSchema)
+    N_largest_local_max_f = fields.List(fields.Number())
+    N_largest_local_max_s = fields.List(fields.Number())
 
-class PhonesFormantsSchema(Schema):
+
+class PhonemesFormantsSchema(Schema):
     formants_info = fields.Nested(FormantsInfoSchema, many=True)

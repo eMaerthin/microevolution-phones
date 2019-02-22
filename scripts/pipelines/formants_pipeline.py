@@ -3,12 +3,12 @@ import json
 import numpy as np
 from scipy.signal import (argrelmax, spectrogram)
 
-from audio_processors import download_youtube_url, prepare_wav_input
+from audio_processors import prepare_wav_input
 from decorators import check_if_already_done
 from format_converters import get_segment
 from schemas import *
 from pipeline import Pipeline
-from phoneme_pipeline import PhonemePipeline
+from pipelines.phoneme_pipeline import PhonemePipeline
 
 
 class FormantsPipeline(Pipeline):
@@ -49,29 +49,28 @@ class FormantsPipeline(Pipeline):
                 phonemes_result = schema.load(json_file)
                 phonemes_info = [info for info in phonemes_result['info']
                                  if info['word'] not in self.blacklisted_phonemes]
-                # phonemes_info = phonemes_info[:100]
-                ms_markers = [(1000 * p['start'], 1000 * p['end']) for p in phonemes_info]
-                scattered_segments = [np.array(wav[start:stop].get_array_of_samples()) for (start,stop) in ms_markers]
                 maximum_len = 8192
-                spectrograms = [spectrogram(segment, frequency, window=('kaiser', 4.0),
-                                            nperseg=min(maximum_len, len(segment)), noverlap=1)
-                                for segment in scattered_segments]
                 formants_result = []
-                for (freq, t, Sxx), info in zip(spectrograms, phonemes_info):
+                for info in phonemes_info:
+                    start, stop = (1000 * info['start'], 1000 * info['end'])
+                    segment = np.array(wav[start:stop].get_array_of_samples())
+                    freq, t, Sxx = spectrogram(segment, frequency, window=('kaiser', 4.0),
+                                               nperseg=min(maximum_len, len(segment)), noverlap=1)
                     for i in range(len(t)):
                         n = 5
                         ith_spectrogram = Sxx[:, i]
+                        spectrogram_normalized = ith_spectrogram/sum(ith_spectrogram)
                         local_maxima = argrelmax(ith_spectrogram)[0]
                         n_largest_local_max_f_idx = local_maxima[ith_spectrogram[local_maxima].argsort()[-n:][::-1]]
                         n_largest_local_max_f = freq[n_largest_local_max_f_idx]
-                        n_largest_local_max_s = ith_spectrogram[n_largest_local_max_f_idx]
+                        n_largest_local_max_s = spectrogram_normalized[n_largest_local_max_f_idx]
                         formant_result = {'t': t[i], 'i': i, 'len_t': len(t), 'len_freq': len(freq),
-                                          'freq_delta': freq[1] - freq[0], 'info': info,
+                                          'freq_delta': freq[1] - freq[0], **info,
                                           'max_f': freq[np.argmax(Sxx[:, i])], 'N': n,
                                           'N_largest_local_max_f': n_largest_local_max_f,
                                           'N_largest_local_max_s': n_largest_local_max_s}
                         formants_result.append(formant_result)
-                formants = PhonesFormantsSchema()
+                formants = PhonemesFormantsSchema()
                 formants_dict = {'formants_info': formants_result}
                 result = formants.dumps(formants_dict)
                 with open(formants_result_path, 'w') as f:
@@ -80,7 +79,7 @@ class FormantsPipeline(Pipeline):
             return False
         recognize_formants(segments_path, phonemes_result_path, formants_result_path)
 
-    def pipeline(self, series_json_path, series_settings):
+    def series_pipeline(self, series_json_path, series_settings):
         datatype = series_settings.get('datatype')
         assert(datatype is not None)
         segments = series_settings.get('segments', [{'start': 'begin', 'stop': 'end'}])
