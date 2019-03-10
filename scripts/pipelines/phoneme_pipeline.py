@@ -1,5 +1,5 @@
 import json
-from os.path import (dirname, join)
+from os.path import (basename, dirname, join)
 
 from marshmallow import pprint
 from pocketsphinx.pocketsphinx import Decoder
@@ -105,7 +105,7 @@ class PhonemePipeline(Pipeline):
         lang_code = None
         if isinstance(metadata, dict):
             lang_code = metadata.get('language')
-        audio_file_name = f'{series_json_path[:-5]}_audio'
+        audio_file_name = basename(f'{series_json_path[:-5]}_audio')
         audio_path, caption_path = download_youtube_url(url, datatype,
                                                         dirname(series_json_path),
                                                         audio_file_name, lang_code,

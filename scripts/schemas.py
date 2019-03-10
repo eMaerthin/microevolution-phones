@@ -43,7 +43,7 @@ class PhonemesSchema(Schema):
 
 class FormantsInfoSchema(PhonemeInfoSchema):
     t = fields.Number(validate=lambda t: t >= 0)
-    i = fields.Number(validate=lambda t: t >= 0)
+    i = fields.Number(validate=lambda i: i >= 0)
     len_t = fields.Number()
     len_freq = fields.Number()
     freq_delta = fields.Number()
@@ -55,3 +55,19 @@ class FormantsInfoSchema(PhonemeInfoSchema):
 
 class PhonemesFormantsSchema(Schema):
     formants_info = fields.Nested(FormantsInfoSchema, many=True)
+
+
+class SpectrogramInfoSchema(PhonemeInfoSchema):
+    t = fields.Number(validate=lambda t: t >= 0)
+    i = fields.Number(validate=lambda i: i >= 0)
+    len_t = fields.Number()
+    len_freq = fields.Number()
+    freq_delta = fields.Number()
+    N = fields.Number()
+    # frequency = fields.List(fields.Number(validate=lambda f: f >= 0))
+    signal = fields.List(fields.Number(validate=lambda s: s >= 0))
+    # normalized_signal = fields.List(fields.Number(validate=lambda n: n >= 0))
+
+
+class PhonemesSpectrogramsSchema(Schema):
+    spectrograms_info = fields.Nested(SpectrogramInfoSchema, many=True)

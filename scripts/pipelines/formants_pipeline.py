@@ -20,10 +20,10 @@ class FormantsPipeline(Pipeline):
     @staticmethod
     def filename_prerequisites():
         def audio_path(json_path):
-            return f'{json_path[:-5]}_audio.mp4'
+            return f'{json_path[:-5]}_audio_orig_freq.wav'
         return [audio_path, PhonemePipeline.result_filename]
 
-    _blacklisted_phonemes = ['SIL']
+    _blacklisted_phonemes = ['SIL', '+SPN+', '+NSN+']
 
     @property
     def blacklisted_phonemes(self):
@@ -49,7 +49,7 @@ class FormantsPipeline(Pipeline):
                 phonemes_result = schema.load(json_file)
                 phonemes_info = [info for info in phonemes_result['info']
                                  if info['word'] not in self.blacklisted_phonemes]
-                maximum_len = 8192
+                maximum_len = 4096
                 formants_result = []
                 for info in phonemes_info:
                     start, stop = (1000 * info['start'], 1000 * info['end'])
@@ -76,7 +76,6 @@ class FormantsPipeline(Pipeline):
                 with open(formants_result_path, 'w') as f:
                     f.write(result)
                     return True
-            return False
         recognize_formants(segments_path, phonemes_result_path, formants_result_path)
 
     def series_pipeline(self, series_json_path, series_settings):
@@ -92,6 +91,9 @@ class FormantsPipeline(Pipeline):
             print(f'audio_path: {audio_path}, phonemes_path: {phonemes_path}')
         wav_path, segments_path = prepare_wav_input(audio_path, datatype, segments,
                                                     self.verbose, use_original_frequency=True)
+        self.compute_target(segments_path, phonemes_path, series_json_path)
+
+    def compute_target(self, segments_path, phonemes_path, series_json_path):
         formants_result_path = self.result_filename(series_json_path)
         self.compute_formants(segments_path, phonemes_path, formants_result_path)
         if self.verbose > 0:

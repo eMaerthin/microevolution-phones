@@ -18,8 +18,7 @@ def download_youtube_url(url, datatype, output_path, filename, lang_code,
         if verbose > 0:
             print(f' trying to download youtube movie {url}')
         yt = YouTube(url)
-        audio_stream = yt.streams.filter(subtype=datatype,
-                                         only_audio=True).order_by('abr').asc().first()
+        audio_stream = yt.streams.filter(subtype=datatype).order_by('itag').asc().first()
         assert(audio_stream is not None)
         if verbose > 0:
             print(f'Found valid audio stream: {audio_stream}')
@@ -58,7 +57,7 @@ def time_string_to_sec(str):
 def map_time_string(str, rec_time):
     if str is 'begin':
         return 0.0
-    elif str is 'stop':
+    elif str is 'end':
         return rec_time
     else:
         sec_time = time_string_to_sec(str)

@@ -1,5 +1,17 @@
 from functools import wraps
 from os.path import isfile
+import time
+
+
+def timeit(func):
+    def timed(*args, **kw):
+        ts = time.time()
+        result = func(*args, **kw)
+        te = time.time()
+        print(f'{func.__name__}: {te-ts} sec')
+        return result
+
+    return timed
 
 
 def check_if_already_done(check_path, verbose=0, ret_value_validator=None, ignore_already_done=False):
