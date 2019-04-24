@@ -71,3 +71,22 @@ class SpectrogramInfoSchema(PhonemeInfoSchema):
 
 class PhonemesSpectrogramsSchema(Schema):
     spectrograms_info = fields.Nested(SpectrogramInfoSchema, many=True)
+
+
+class MfccInfoSchema(PhonemeInfoSchema):
+    i = fields.Number(validate=lambda i: i >= 0)
+    length = fields.Number(validate=lambda l: l >= 0)
+    mfcc = fields.List(fields.Number())
+
+
+class MfccSchema(Schema):
+    mfcc_info = fields.Nested(MfccInfoSchema, many=True)
+
+
+class SingleMfccGlobalSchema(Schema):
+    i = fields.Number(validate=lambda i: i >= 0)
+    mfcc = fields.List(fields.Number())
+
+
+class MfccGlobalSchema(Schema):
+    mfcc_global_info = fields.Nested(SingleMfccGlobalSchema, many=True)

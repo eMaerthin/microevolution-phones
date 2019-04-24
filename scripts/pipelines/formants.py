@@ -8,19 +8,38 @@ from decorators import check_if_already_done
 from format_converters import get_segment
 from schemas import *
 from pipeline import Pipeline
-from pipelines.phoneme_pipeline import PhonemePipeline
+from pipelines.phoneme import Phoneme
 
 
-class FormantsPipeline(Pipeline):
+def protect(*protected):
+    """Returns a metaclass that protects all attributes given as strings"""
+    class Protect(type):
+        has_base = False
+        def __new__(meta, name, bases, attrs):
+            if meta.has_base:
+                for attribute in attrs:
+                    if attribute in protected:
+                        raise AttributeError('Overriding of attribute "%s" not allowed.'%attribute)
+            meta.has_base = True
+            klass = super().__new__(meta, name, bases, attrs)
+            return klass
+    return Protect
+
+
+class FormantsPipeline(Pipeline, metaclass=protect("filename_prerequisites")):
 
     @staticmethod
     def result_filename(json_path):
         return f'{json_path[:-5]}_formants_result.json'
 
     @staticmethod
+    def result_filename_postprocessed(json_path):
+        return f'{json_path[:-5]}_formants_result.csv'
+
+    @staticmethod
     def filename_prerequisites():
         def audio_path(json_path):
-            return f'{json_path[:-5]}_audio_orig_freq.wav'
+            return f'{json_path[:-5]}_audio.mp4'
         return [audio_path, PhonemePipeline.result_filename]
 
     _blacklisted_phonemes = ['SIL', '+SPN+', '+NSN+']

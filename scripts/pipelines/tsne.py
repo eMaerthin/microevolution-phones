@@ -25,23 +25,22 @@ class TsnePipeline(Pipeline):
     def filename_prerequisites():
         return [FormantsPipeline.result_filename]
 
+    @staticmethod
+    def filename_prerequisites_postprocessed():
+        return [FormantsPipeline.result_filename_postprocessed]
+
     def subject_pipeline(self, working_dir, series, common_settings):
         X = []
         y = []
-        format = 'season{s}_part{p}.json'
-        series = sorted(series, key=lambda x: (int(parse.parse(format, x)['s']),
-                                               int(parse.parse(format, x)['p'])))
+        series = self.sort_series(series)  # , '{}_{}.json')
         for series_json_filename in series:
-            settings = self.load_settings(working_dir, series_json_filename, self.verbose)
             series_json_path = join(working_dir, series_json_filename)
-            series_schema = SeriesSchema()
-            series_settings = series_schema.dump(self.merge_settings(common_settings, settings))
             schema = PhonemesFormantsSchema()
             formants_result_path = self.filename_prerequisites()[0](series_json_path)
-            formants_csv_result_path = f'{formants_result_path[:-5]}.csv'
+            formants_csv_result_path = self.filename_prerequisites_postprocessed()[0](series_json_path)
 
             @timeit
-            @check_if_already_done(formants_csv_result_path, self.verbose) #, ignore_already_done=True)
+            @check_if_already_done(formants_csv_result_path, self.verbose)  # , ignore_already_done=True)
             def store_formants_result_as_csv(formants_result_path, formants_csv_result_path):
                 with open(formants_result_path, 'r') as f:
                     print(f' phonemes_formants_result_path: {formants_result_path}')
@@ -50,16 +49,15 @@ class TsnePipeline(Pipeline):
                     if self.verbose > 1:
                         pprint(result, indent=4)
                     df = pd.DataFrame.from_dict(result['formants_info'])
-                    df = df.N_largest_local_max_f.apply(pd.Series).merge(df, left_index=True,
+                    df = df.N_largest_local_max_f.apply(pd.Series).add_suffix('_formant').merge(df, left_index=True,
                                                                          right_index=True).drop(['N_largest_local_max_f'],
                                                                                                 axis=1)
-                    df = df.N_largest_local_max_s.apply(pd.Series).merge(df, left_index=True,
+                    df = df.N_largest_local_max_s.apply(pd.Series).add_suffix('_signal').merge(df, left_index=True,
                                                                          right_index=True).drop(['N_largest_local_max_s'],
                                                                                                 axis=1)
-                    # df.rename(columns=lambda x: x[:-1] + 'signal' if x.endswith('_x') else x, inplace=True)
-                    df.rename(columns=lambda x: x[:-1] + 'formant' if x.endswith('_y') else x, inplace=True)
-                    # filter nans:
                     for c in df.filter(regex='formant$', axis=1).columns:
+                        df = df[df[c].notnull()]
+                    for c in df.filter(regex='signal$', axis=1).columns:
                         df = df[df[c].notnull()]
                     df.to_csv(formants_csv_result_path)
 
@@ -91,7 +89,7 @@ class TsnePipeline(Pipeline):
         @timeit
         @check_if_already_done(tsne_result_path, self.verbose)  # , ignore_already_done=True)
         def cache_fit_tsne(tsne_result_path, X, y):
-            tsne_X = fit_tsne(X, n_iter=250)  # , n_iter=3000) #, n_iter=10000, n_iter_without_progress=100, perplexity=200)
+            tsne_X = fit_tsne(X, n_iter=1000)  # , n_iter=3000) #, n_iter=10000, n_iter_without_progress=100, perplexity=200)
             pickle_dumped = dumps(tsne_X)
             with open(tsne_result_path, 'wb') as f:
                 f.write(pickle_dumped)
@@ -133,11 +131,11 @@ class TsnePipeline(Pipeline):
                     #tsne_X = [x for x, e in enumerate(z) for z, f in enumerate(tsne_X) if y[f][e] in filter]
                     #tsne_X = [x for x, e in enumerate(z) for z, f in enumerate(tsne_X) if y[f][e] in filter]
                     agg_shape=(1, 1)
-                    out_shape=(3, 15)
+                    out_shape=(3, 18)
                     shape_hash = str(agg_shape[0])+'-'+str(agg_shape[1])+'_'+str(out_shape[0])+'-'+str(out_shape[1])
                     draw_result_path = join(working_dir, f'draw_tsne_result_{filter_hash}_{shape_hash}_{filter_local}.png')
-                    draw_composition(tsne_X, y_list, series, draw_result_path, verbose=self.verbose,
-                              out_shape=out_shape, agg_shape=agg_shape, drawing_subsamples=True, suptitle=f'tsne trained on: {filter} -> visualization filter: {filter_local}')
+                    draw_composition(tsne_X, y_list, draw_result_path, verbose=self.verbose,
+                              out_shape=out_shape, agg_shape=agg_shape, drawing_subsamples=True, sup_title=f'tsne trained on: {filter} -> visualization filter: {filter_local}')
         else:
 
             cache_pca(pca_result_path, X)

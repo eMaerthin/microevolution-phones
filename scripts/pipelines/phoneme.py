@@ -13,25 +13,24 @@ from pipeline import Pipeline
 MODELDIR = "../pocketsphinx/model"
 
 
-class PhonemePipeline(Pipeline):
-
+class Phoneme(Pipeline):
     @staticmethod
     def result_filename(json_path):
-        return f'{json_path[:-5]}_result.json'
+        return f'{json_path[:-5]}_phoneme_result.json'
 
     @staticmethod
     def filename_prerequisites():
         return []
 
     def compute_phonemes(self, segments_path, phonemes_result_path,
-                         modeldir=MODELDIR):
+                         model_dir=MODELDIR):
         @check_if_already_done(phonemes_result_path, self.verbose)
-        def recognize_phonemes(segments_path, phonemes_result_path, modeldir):
+        def recognize_phonemes(segments_path, phonemes_result_path, model_dir):
             # Create a decoder with certain model
             config = Decoder.default_config()
-            config.set_string('-hmm', join(modeldir, 'en-us/en-us'))
-            config.set_string('-allphone', join(modeldir, 'en-us/en-us-phone.lm.bin'))
-            config.set_string('-dict', join(modeldir, 'en-us/cmudict-en-us.dict'))
+            config.set_string('-hmm', join(model_dir, 'en-us/en-us'))
+            config.set_string('-allphone', join(model_dir, 'en-us/en-us-phone.lm.bin'))
+            config.set_string('-dict', join(model_dir, 'en-us/cmudict-en-us.dict'))
             config.set_float('-lw', 2.0)
             config.set_float('-pip', 0.3)
             config.set_float('-beam', 1e-200)
@@ -84,7 +83,7 @@ class PhonemePipeline(Pipeline):
             with open(phonemes_result_path, 'w') as f:
                 f.write(phonemes_result)
 
-        recognize_phonemes(segments_path, phonemes_result_path, modeldir)
+        recognize_phonemes(segments_path, phonemes_result_path, model_dir)
 
         if self.verbose > 1:
             schema = PhonemesSchema()
@@ -115,4 +114,5 @@ class PhonemePipeline(Pipeline):
         phonemes_result_file = self.result_filename(series_json_path)
         if self.verbose > 0:
             print(f'phonemes result file: {phonemes_result_file}')
-        self.compute_phonemes(segments_path, phonemes_result_file)
+        if True:
+            self.compute_phonemes(segments_path, phonemes_result_file)
