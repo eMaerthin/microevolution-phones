@@ -9,14 +9,14 @@ from decorators import (check_if_already_done, timeit)
 from dimensionality_reduction import (draw_X2, animate_language_change, fit_tsne, fit_pca)
 from marshmallow import pprint
 from schemas import *
-from pipeline import Pipeline
+from chain import Pipeline
 from pipelines.mfcc_pipeline import MfccPipeline
 
 class TsnePipelineMfcc(Pipeline):
-    def __init__(self, verbose, subjects_dir):
-        super(TsnePipelineMfcc, self).__init__(verbose=verbose, subjects_dir=subjects_dir)
-        self._x = [] # TODO(mbodych): let's improve code readability by changing name of this variable
-        self._y = [] # TODO(mbodych): let's improve code readability by changing name of this variable
+    def __init__(self):
+        super(TsnePipelineMfcc, self).__init__()
+        self._x = []  # TODO(mbodych): let's improve code readability by changing name of this variable
+        self._y = []  # TODO(mbodych): let's improve code readability by changing name of this variable
 
     @staticmethod
     def result_filename(json_path):
@@ -64,12 +64,7 @@ class TsnePipelineMfcc(Pipeline):
         self._x.append(df.values)
 
     def subject_pipeline(self, working_dir, series, common_settings):
-        series = self.sort_series(series)  # , '{}.json')
-        for series_json_filename in series:
-            settings = self.load_settings(working_dir, series_json_filename, self.verbose)
-            series_json_path = join(working_dir, series_json_filename)
-            series_settings = self.merge_settings(common_settings, settings)
-            self.series_pipeline(series_json_path, series_settings)
+        super(TsnePipelineMfcc, self).subject_pipeline(working_dir, series, common_settings)
 
     def global_pipeline(self, series_to_process):
         self._x = []

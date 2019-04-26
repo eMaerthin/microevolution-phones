@@ -9,14 +9,14 @@ from decorators import (check_if_already_done, timeit)
 from dimensionality_reduction import (animate_language_change, draw_X2, fit_tsne, fit_pca)
 from marshmallow import pprint
 from schemas import *
-from pipeline import Pipeline
+from chain import Pipeline
 from pipelines.mfcc_global_pipeline import MfccGlobalPipeline
 
 
 class TsnePipelineMfccGlobal(Pipeline):
-    def __init__(self, verbose, subjects_dir):
-        super(TsnePipelineMfccGlobal, self).__init__(verbose=verbose, subjects_dir=subjects_dir)
-        self._x = [] # TODO(mbodych): let's improve code readability by changing name of this variable
+    def __init__(self):
+        super(TsnePipelineMfccGlobal, self).__init__()
+        self._x = []  # TODO(mbodych): let's improve code readability by changing name of this variable
 
     @staticmethod
     def result_filename(json_path):

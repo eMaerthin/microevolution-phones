@@ -9,7 +9,7 @@ from decorators import (check_if_already_done, timeit)
 from dimensionality_reduction import (draw_composition, fit_tsne, fit_pca)
 from marshmallow import pprint
 from schemas import *
-from pipeline import Pipeline
+from chain import Pipeline
 from pipelines.spectrogram_pipeline import SpectrogramPipeline
 
 class TsnePipeline2(Pipeline):

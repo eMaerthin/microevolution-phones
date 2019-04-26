@@ -182,9 +182,11 @@ def parse_segment(segment, rec_time):
 
 
 def prepare_wav_input(audio_path, datatype, segments, verbose, use_original_frequency=False):
-    wav_path = f'{audio_path[:-3]}wav'
     if use_original_frequency:
         wav_path = f'{audio_path[:-4]}_orig_freq.wav'
+    else:
+        wav_path = f'{audio_path[:-3]}wav'
+
     segments_path = f'{wav_path[:-4]}_segments.wav'
 
     @check_if_already_done(wav_path, verbose)

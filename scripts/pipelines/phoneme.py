@@ -8,22 +8,28 @@ from audio_processors import download_youtube_url, prepare_wav_input
 from decorators import check_if_already_done
 from schemas import (PhonemeInfoSchema, PhonemesHypothesisSchema, PhonemesSchema)
 
-from pipeline import Pipeline
+from chain import Chain
 
-MODELDIR = "../pocketsphinx/model"
+MODEL_DIR = "../thirdparty/pocketsphinx/model"
 
 
-class Phoneme(Pipeline):
+class Phoneme(Chain):
+
+    requirements = []
+
     @staticmethod
-    def result_filename(json_path):
-        return f'{json_path[:-5]}_phoneme_result.json'
+    def sample_result_filename(sample):
+        return f'{sample[:-5]}_phoneme_result.json'
 
-    @staticmethod
-    def filename_prerequisites():
-        return []
+    def _compute_phonemes(self, segments_path, phonemes_result_path,
+                          model_dir):
+        """
 
-    def compute_phonemes(self, segments_path, phonemes_result_path,
-                         model_dir=MODELDIR):
+        :param segments_path:
+        :param phonemes_result_path:
+        :param model_dir:
+        :return:
+        """
         @check_if_already_done(phonemes_result_path, self.verbose)
         def recognize_phonemes(segments_path, phonemes_result_path, model_dir):
             # Create a decoder with certain model
@@ -88,31 +94,30 @@ class Phoneme(Pipeline):
         if self.verbose > 1:
             schema = PhonemesSchema()
             with open(phonemes_result_path, 'r') as f:
-                print(f' phonemes_result_path: {phonemes_result_path}')
+                print(f'[DETAILS] phonemes_result_path: {phonemes_result_path}')
                 json_file = json.load(f)
                 result = schema.load(json_file)
                 pprint(result, indent=4)
 
-        return phonemes_result_path
-
-    def series_pipeline(self, series_json_path, series_settings):
-        url = series_settings.get('url')
-        datatype = series_settings.get('datatype')
+    def sample_layer(self, subject, sample_json_filename, settings):
+        url = settings.get('url')
+        datatype = settings.get('datatype')
         assert(datatype is not None)
-        segments = series_settings.get('segments', [{'start': 'begin', 'stop': 'end'}])
-        metadata = series_settings.get('metadata')
+        segments = settings.get('segments', [{'start': 'begin', 'stop': 'end'}])
+        metadata = settings.get('metadata')
         lang_code = None
         if isinstance(metadata, dict):
             lang_code = metadata.get('language')
-        audio_file_name = basename(f'{series_json_path[:-5]}_audio')
+        output_path_pattern = join(self.results_dir, subject, sample_json_filename)
+        audio_file_name = basename(f'{output_path_pattern[:-5]}_audio')
         audio_path, caption_path = download_youtube_url(url, datatype,
-                                                        dirname(series_json_path),
+                                                        dirname(output_path_pattern),
                                                         audio_file_name, lang_code,
                                                         self.verbose)
         wav_path, segments_path = prepare_wav_input(audio_path, datatype, segments,
                                                     self.verbose)
-        phonemes_result_file = self.result_filename(series_json_path)
+        phonemes_result_file = self.sample_result_filename(output_path_pattern)
         if self.verbose > 0:
-            print(f'phonemes result file: {phonemes_result_file}')
-        if True:
-            self.compute_phonemes(segments_path, phonemes_result_file)
+            print(f'[INFO] phonemes result file: {phonemes_result_file}')
+        self._compute_phonemes(segments_path, phonemes_result_file,
+                               model_dir=MODEL_DIR)

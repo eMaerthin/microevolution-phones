@@ -1,5 +1,10 @@
-from pipeline import Pipeline
+from chain import Chain
 
 
-class Preprocess(Pipeline):
+class Preprocess(Chain):
+
+    requirements = []
+
+    @staticmethod
+    def sample_result_filename(sample):
     pass
