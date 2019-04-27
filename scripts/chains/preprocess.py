@@ -7,4 +7,4 @@ class Preprocess(Chain):
 
     @staticmethod
     def sample_result_filename(sample):
-    pass
+        pass

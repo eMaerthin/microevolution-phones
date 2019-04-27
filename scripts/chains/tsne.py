@@ -12,8 +12,8 @@ from dimensionality_reduction import (draw_composition, fit_tsne, fit_pca)
 from marshmallow import pprint
 from schemas import *
 from chain import Pipeline
-from pipelines.formants_pipeline import FormantsPipeline
-# from pipelines.spectrogram_pipeline import SpectrogramPipeline
+from chains.formants_pipeline import FormantsPipeline
+# from chains.spectrogram_pipeline import SpectrogramPipeline
 
 class TsnePipeline(Pipeline):
 

@@ -39,12 +39,16 @@ class Chain(metaclass=protect_abc("load_settings", "merge_data_settings")):
     then ordered list will be [A,B,C]
 
     Chain has few read-write properties:
-     - verbose (sets verbosity)
      - base_dir (sets parent directory where subjects from the dataset are placed)
      - process_settings (this adjust how to process the chain)
+     - results_identifier (stores name of the directory comprising experiment's results)
+     - verbose (sets verbosity)
 
-    In addition there is one factory classmethod called from_verbose_and_base_dir
-    that initializes Chain with verbose and base_dir.
+     and a read-only property results_dir that holds absolute path of the experiment's results
+
+
+    In addition there is one factory classmethod called initialize_from_parameters
+    that initializes Chain with base_dir, results_identifier and verbose.
 
     Subclass has to provide an implementation of following abstract methods:
     - sample_result_filename
@@ -74,10 +78,24 @@ class Chain(metaclass=protect_abc("load_settings", "merge_data_settings")):
                                                      sort=False)
 
     def __init__(self):
-        self._verbose = 0
         self._base_dir = ''
-        self._results_dir = ''
         self._process_settings = {'raise_error_on_conflict_values': True}
+        self._results_identifier = ''
+        self._verbose = 0
+
+    @property
+    def base_dir(self):
+        """
+        An absolute path to base directory (dataset level)
+        :return:
+        """
+        return self._base_dir
+
+    @base_dir.setter
+    def base_dir(self, new_value):
+        if not exists(new_value):
+            raise ValueError(f'base_dir {new_value} does not exist!')
+        self._base_dir = str(new_value)
 
     @property
     def process_settings(self):
@@ -85,9 +103,23 @@ class Chain(metaclass=protect_abc("load_settings", "merge_data_settings")):
 
     @process_settings.setter
     def process_settings(self, new_value):
+        if new_value is None:
+            new_value = dict()
         if not isinstance(new_value, dict):
             raise TypeError('expected argument of type dict')
         self._process_settings = new_value
+
+    @property
+    def results_dir(self):
+        return join(self.base_dir, '_results', self.results_identifier)
+
+    @property
+    def results_identifier(self):
+        return self._results_identifier
+
+    @results_identifier.setter
+    def results_identifier(self, new_value):
+        self._results_identifier = str(new_value)
 
     @property
     def verbose(self):
@@ -107,36 +139,23 @@ class Chain(metaclass=protect_abc("load_settings", "merge_data_settings")):
             raise ValueError('expected number between 0 and 2')
         self._verbose = new_value
 
-    @property
-    def base_dir(self):
-        """
-        An absolute path to base directory (dataset level)
-        :return:
-        """
-        return self._base_dir
-
-    @base_dir.setter
-    def base_dir(self, new_value):
-        if not exists(new_value):
-            raise ValueError(f'base_dir {new_value} does not exist!')
-        self._base_dir = str(new_value)
-        self._results_dir = join(self._base_dir, 'results')
-
-    @property
-    def results_dir(self):
-        return self._results_dir
-
     @classmethod
-    def from_verbose_and_base_dir(cls, verbose, base_dir):
+    def initialize_from_parameters(cls, base_dir, process_settings,
+                                   results_identifier, verbose):
         """
         Initializes class with given verbose and base_dir values
-        :param verbose: verbosity level
         :param base_dir: An absolute path to base directory
+        :param process_settings: dictionary with settings
+        :param results_identifier: name for intermediate folder
+        comprising experiment' results
+        :param verbose: verbosity level
         :return:
         """
         pipeline = cls()
-        pipeline.verbose = verbose
         pipeline.base_dir = base_dir
+        pipeline.process_settings = process_settings
+        pipeline.results_identifier = results_identifier
+        pipeline.verbose = verbose
         return pipeline
 
     @staticmethod
@@ -307,35 +326,36 @@ class Chain(metaclass=protect_abc("load_settings", "merge_data_settings")):
         :param pattern: refers to output paths/result filenames
         :return: True/False whether to skip the current object of interest.
         """
-        if level == 'subject':
-            skip_candidates = self.filenames_to_skip_subject(pattern)
-            prerequisites = self.subject_filename_prerequisites()
-        elif level == 'sample':
-            skip_candidates = self.filenames_to_skip_sample(pattern)
-            prerequisites = self.sample_filename_prerequisites()
-        elif level == 'dataset':
-            skip_candidates = self.filenames_to_skip_dataset(pattern)
-            prerequisites = self.dataset_filename_prerequisites()
-        else:
-            raise ValueError(f'Invalid level: {level}')
+        skip_candidates = {'sample': self.filenames_to_skip_sample,
+                           'subject': self.filenames_to_skip_subject,
+                           'dataset': self.filenames_to_skip_dataset}
+
+        prerequisites = {'sample': self.sample_filename_prerequisites,
+                         'subject': self.subject_filename_prerequisites,
+                         'dataset': self.dataset_filename_prerequisites}
 
         if any((isfile(filename_to_skip) for filename_to_skip
-                in skip_candidates)):
+                in skip_candidates[level](pattern))):
             if self.verbose > 0:
                 print(f'[INFO] detected filenames_to_skip_{level}'
                       f'for {level} {input_data} - hence processing '
                       f'the {level} is skipped')
+                found = [skipper for skipper in skip_candidates[level](pattern)
+                         if isfile(skipper)]
+                print(f'[INFO] found skippers: {found}')
             return True
+
         if any((not isfile(prerequisite(pattern)) for prerequisite
-                in prerequisites)):
+                in prerequisites[level]())):
             if self.verbose > 0:
                 print(f'[WARNING] some prerequisites are not found '
                       f'for the {level} {input_data} - hence '
                       f'processing the {level} is skipped')
-                not_found = [p(pattern) for p in prerequisites
+                not_found = [p(pattern) for p in prerequisites[level]()
                              if not isfile(p(pattern))]
                 print(f'[WARNING] not found prerequisites: {not_found}')
             return True
+
         return False
 
     def subject_layer(self, subject, samples, subject_settings):
@@ -401,7 +421,10 @@ class Chain(metaclass=protect_abc("load_settings", "merge_data_settings")):
         :return: None
         """
         dataset = []
-        for (dir_path, _, filenames) in walk(self.base_dir):
+        excluded = ['_results', '_configs']
+        for (dir_path, dirs, filenames) in walk(self.base_dir,
+                                               topdown=True):
+            dirs[:] = [d for d in dirs if d not in excluded]
             jsons = list(filter(lambda x: all([x.endswith('json'),
                                                not (x.startswith('.')),
                                                not (x.endswith('result.json')),
@@ -413,6 +436,9 @@ class Chain(metaclass=protect_abc("load_settings", "merge_data_settings")):
                 if self.verbose > 1:
                     print(f'[DETAILS] Added subject-samples pair: {subject_samples}')
                 dataset.append(subject_samples)
+
+        assert self.sample_result_filename('').endswith('result.json'),\
+            'verification that sample_result_filename ends with result.json'
 
         if not self._check_skip_conditions('dataset', dataset, self.results_dir):
             self.dataset_layer(dataset)

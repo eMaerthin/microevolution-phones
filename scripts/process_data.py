@@ -12,6 +12,7 @@ if __name__ == '__main__':
     example use: 
     1) playlist --subjects_homedir '/Volumes/Transcend/phd/microevolution-lang-phones-data/subjects/chessnetwork/longPlaylist'
     2) run --dataset_home_dir '/Volumes/Transcend/phd/microevolution-lang-phones-data/subjects/dummy_test/' --verbose 1 process-chains
+    3) run --dataset_home_dir '/Volumes/Transcend/phd/microevolution-lang-phones-data/subjects/dummy_test/' --verbose 1 process-chain --chain_name Formants
     """
     fire.Fire({
               'playlist': process_playlist_url,

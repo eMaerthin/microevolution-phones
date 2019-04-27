@@ -2,35 +2,41 @@ import json
 
 import numpy as np
 from python_speech_features import mfcc
-from scipy.signal import spectrogram
 
 from decorators import check_if_already_done
 from format_converters import get_segment
 from schemas import *
-from pipelines.formants_pipeline import FormantsPipeline
-from pipelines.phoneme_pipeline import PhonemePipeline
+from chains.formants import Formants
+from chains.phoneme import Phoneme
 
 
-class MfccPipeline(FormantsPipeline):
+class MfccLocal(Formants):
+    """
+    MfccLocal computes Mfcc features for each phoneme from the sample
+    that are not blacklisted based on phoneme label that is
+    received from Phoneme chain.
+
+    It subclasses Formants to not repeat the sample_layer logic
+    which is valid also in this context
+    """
+    @staticmethod
+    def sample_result_filename(sample):
+        return f'{sample[:-5]}_mfcc_result.json'
 
     @staticmethod
-    def result_filename(json_path):
-        return f'{json_path[:-5]}_mfcc_result.json'
+    def filenames_to_skip_sample(sample):
+        return [f'{sample[:-5]}_mfcc_result.csv']
 
-    @staticmethod
-    def result_filename_postprocessed(json_path):
-        return f'{json_path[:-5]}_mfcc_result.csv'
+    def _compute_mfcc(self, segments_path, phonemes_result_path, mfcc_result_path):
+        phoneme_len = self.process_settings.get("phoneme_len", 2048)
+        ignore_shorter_phonemes = self.process_settings.get("ignore_shorter_phonemes", True)
 
-    def compute_mfcc(self, segments_path, phonemes_result_path, mfcc_result_path,
-                             phoneme_len=2048, ignore_shorter_phonemes=True):
         @check_if_already_done(mfcc_result_path, self.verbose, lambda x: x)
         def store_mfcc(segments_path, phonemes_result_path, mfcc_result_path):
-            print(segments_path)
             wav = get_segment(segments_path, 'wav')
             frequency = wav.frame_rate
             schema = PhonemesSchema()
             with open(phonemes_result_path, 'r') as f:
-                print(f' phonemes_result_path: {phonemes_result_path}')
                 json_file = json.load(f)
                 phonemes_result = schema.load(json_file)
                 phonemes_info = [info for info in phonemes_result['info']
@@ -55,8 +61,8 @@ class MfccPipeline(FormantsPipeline):
                     return True
         store_mfcc(segments_path, phonemes_result_path, mfcc_result_path)
 
-    def compute_target(self, segments_path, phonemes_path, series_json_path):
-        mfcc_result_path = self.result_filename(series_json_path)
-        self.compute_mfcc(segments_path, phonemes_path, mfcc_result_path)
+    def compute_target(self, segments_path, phonemes_path, output_path_pattern):
+        mfcc_result_path = self.sample_result_filename(output_path_pattern)
+        self._compute_mfcc(segments_path, phonemes_path, mfcc_result_path)
         if self.verbose > 0:
-            print(f'mfcc result path: {mfcc_result_path}')
+            print(f'[INFO] mfcc result path: {mfcc_result_path}')

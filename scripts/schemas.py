@@ -1,5 +1,5 @@
 from marshmallow import (fields, Schema)
-
+from os.path import exists
 
 class SegmentSchema(Schema):
     start = fields.Str()
@@ -90,3 +90,10 @@ class SingleMfccGlobalSchema(Schema):
 
 class MfccGlobalSchema(Schema):
     mfcc_global_info = fields.Nested(SingleMfccGlobalSchema, many=True)
+
+
+class ChainRunnerSettingsSchema(Schema):
+    dataset_home_dir = fields.String(validate=lambda home_dir: exists(home_dir))
+    process_settings = fields.Dict()
+    results_identifier = fields.String()
+    verbose = fields.Number(validate=lambda i: all((i >= 0, i <= 2)))

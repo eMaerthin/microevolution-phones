@@ -1,20 +1,40 @@
+import json
+from os import makedirs
+from os.path import join
+from pathlib import Path
+from shutil import copy
+
+from marshmallow import ValidationError
+
 from chain import Chain
-import pipelines # required to register chains
+import chains as this_line_is_necessary_to_register_chains
+from schemas import ChainRunnerSettingsSchema
+
+# TODO(marcin): replace "verbose" with https://realpython.com/python-logging/
 
 
 class ChainRunner(object):
 
-    def __init__(self, dataset_home_dir='../subjects/', verbose=1):
-        self._dataset_home_dir = dataset_home_dir
-        self._verbose = verbose
+    @classmethod
+    def from_experiment_config(cls, experiment_config_path):
+        schema = ChainRunnerSettingsSchema()
+        with open(experiment_config_path, 'r') as f_csv:
+            json_file = json.load(f_csv)
+            result = schema.load(json_file)
+            result_dir = join(result['dataset_home_dir'], '_results',
+                              result['results_identifier'])
+            makedirs(result_dir, exist_ok=True)
+            copy(experiment_config_path,
+                 join(result_dir, Path(experiment_config_path).name))
+            return cls(**result)
 
-    @property
-    def verbose(self):
-        """
-        read-only property that controls verbosity
-        :return:
-        """
-        return self._verbose
+    def __init__(self, dataset_home_dir='../subjects/',
+                 process_settings='', results_identifier='',
+                 verbose=1):
+        self._dataset_home_dir = dataset_home_dir
+        self._process_settings = process_settings
+        self._results_identifier = results_identifier
+        self._verbose = verbose
 
     @property
     def dataset_home_dir(self):
@@ -23,6 +43,30 @@ class ChainRunner(object):
         :return:
         """
         return self._dataset_home_dir
+
+    @property
+    def process_settings(self):
+        """
+        read-only property that returns dictionary with all chain-custom properties
+        :return:
+        """
+        return self._process_settings
+
+    @property
+    def results_identifier(self):
+        """
+        read-only property that points to the results directory name
+        :return:
+        """
+        return self._results_identifier
+
+    @property
+    def verbose(self):
+        """
+        read-only property that controls verbosity
+        :return:
+        """
+        return self._verbose
 
     def process_chain(self, chain_name='Phoneme'):
         """
@@ -35,7 +79,8 @@ class ChainRunner(object):
         try:
             if self.verbose > 0:
                 print(f'running chain {chain.__name__}')
-            chain.from_verbose_and_base_dir(self.verbose, self.dataset_home_dir).process()
+            chain.initialize_from_parameters(self.dataset_home_dir, self.process_settings,
+                                             self.results_identifier, self.verbose).process()
         except AttributeError as e:
             if self.verbose > 0:
                 print(f'[ERROR] chain_name {chain_name} not found. {e}')
@@ -52,6 +97,8 @@ class ChainRunner(object):
         'exclude' -> process all but mentioned chains
         :return:
         """
+        if not isinstance(filter_set, set):
+            return chains
         if len(filter_set) == 0:
             return chains
 
@@ -65,13 +112,13 @@ class ChainRunner(object):
             raise ValueError(f'filter_function should be either "include" or "exclude", '
                              f'was {filter_function}')
 
-    def process_chains(self, filter_set={}, filter_function='include'):
+    def process_chains(self, filter_set=None, filter_function='include'):
         """
         One of two possible way of processing the data.
         Here all registered chains are processed that are not filtered out
         by filter initialized with filter_set and filter_function parameters.
         :param filter_set: a set of pairs chain patterns (so incomplete names are allowed).
-        If set is empty, process all available chains.
+        If set is empty or None, process all registered Chain subclasses (chains).
         :param filter_function: two options are allowed.
         'include' -> process only mentioned chains,
         'exclude' -> process all but mentioned chains
@@ -80,9 +127,7 @@ class ChainRunner(object):
         try:
             chains = self.filter_chains(Chain.ordered_subclasses, filter_set, filter_function)
             for chain in chains:
-                if self.verbose > 0:
-                    print(f'[INFO] running chain {chain.__name__}')
-                chain.from_verbose_and_base_dir(self.verbose, self.dataset_home_dir).process()
+                self.process_chain(chain.__name__)
         except ValueError as e:
             if self.verbose > 0:
                 print(f'[ERROR] {e}')

@@ -21,27 +21,41 @@ class Phoneme(Chain):
     def sample_result_filename(sample):
         return f'{sample[:-5]}_phoneme_result.json'
 
-    def _compute_phonemes(self, segments_path, phonemes_result_path,
-                          model_dir):
+    def _compute_phonemes(self, segments_path, phonemes_result_path):
         """
 
         :param segments_path:
         :param phonemes_result_path:
-        :param model_dir:
         :return:
         """
+        model_dir = self.process_settings.get('model_dir', MODEL_DIR)
+        decoder_hmm = self.process_settings.get('decoder_hmm', 'en-us/en-us')
+        decoder_allphone = self.process_settings.get('decoder_allphone',
+                                                     'en-us/en-us-phone.lm.bin')
+        decoder_dict = self.process_settings.get('decoder_dict',
+                                                 'en-us/cmudict-en-us.dict')
+        decoder_lw = self.process_settings.get('decoder_lw', 2.0)
+        decoder_pip = self.process_settings.get('decoder_pip', 0.3)
+        decoder_beam = self.process_settings.get('decoder_beam', 1e-200)
+        decoder_pbeam = self.process_settings.get('decoder_pbeam', 1e-20)
+        decoder_mmap = self.process_settings.get('decoder_mmap', False)
+        decoder_stream_buf_size = self.process_settings.get('decoder_stream_buf_size',
+                                                            8192)
+        pprint_indent = self.process_settings.get('pprint_indent', 4)
+
         @check_if_already_done(phonemes_result_path, self.verbose)
         def recognize_phonemes(segments_path, phonemes_result_path, model_dir):
+
             # Create a decoder with certain model
             config = Decoder.default_config()
-            config.set_string('-hmm', join(model_dir, 'en-us/en-us'))
-            config.set_string('-allphone', join(model_dir, 'en-us/en-us-phone.lm.bin'))
-            config.set_string('-dict', join(model_dir, 'en-us/cmudict-en-us.dict'))
-            config.set_float('-lw', 2.0)
-            config.set_float('-pip', 0.3)
-            config.set_float('-beam', 1e-200)
-            config.set_float('-pbeam', 1e-20)
-            config.set_boolean('-mmap', False)
+            config.set_string('-hmm', join(model_dir, decoder_hmm))
+            config.set_string('-allphone', join(model_dir, decoder_allphone))
+            config.set_string('-dict', join(model_dir, decoder_dict))
+            config.set_float('-lw', decoder_lw)
+            config.set_float('-pip', decoder_pip)
+            config.set_float('-beam', decoder_beam)
+            config.set_float('-pbeam', decoder_pbeam)
+            config.set_boolean('-mmap', decoder_mmap)
             hyps=[]
             segs=[]
             decoder = Decoder(config)
@@ -52,7 +66,7 @@ class Phoneme(Chain):
                     ph_info = PhonemeInfoSchema()
                     phonemes = PhonemesSchema()
                     hypothesis = PhonemesHypothesisSchema()
-                    buf = stream.read(8192)
+                    buf = stream.read(decoder_stream_buf_size)
                     if buf:
                         decoder.process_raw(buf, False, False)
                         if decoder.get_in_speech() != in_speech_buffer:
@@ -89,7 +103,7 @@ class Phoneme(Chain):
             with open(phonemes_result_path, 'w') as f:
                 f.write(phonemes_result)
 
-        recognize_phonemes(segments_path, phonemes_result_path, model_dir)
+        recognize_phonemes(segments_path, phonemes_result_path)
 
         if self.verbose > 1:
             schema = PhonemesSchema()
@@ -97,7 +111,7 @@ class Phoneme(Chain):
                 print(f'[DETAILS] phonemes_result_path: {phonemes_result_path}')
                 json_file = json.load(f)
                 result = schema.load(json_file)
-                pprint(result, indent=4)
+                pprint(result, indent=pprint_indent)
 
     def sample_layer(self, subject, sample_json_filename, settings):
         url = settings.get('url')
@@ -119,5 +133,4 @@ class Phoneme(Chain):
         phonemes_result_file = self.sample_result_filename(output_path_pattern)
         if self.verbose > 0:
             print(f'[INFO] phonemes result file: {phonemes_result_file}')
-        self._compute_phonemes(segments_path, phonemes_result_file,
-                               model_dir=MODEL_DIR)
+        self._compute_phonemes(segments_path, phonemes_result_file)

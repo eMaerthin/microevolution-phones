@@ -8,8 +8,8 @@ from audio_processors import prepare_wav_input
 from decorators import check_if_already_done
 from format_converters import get_segment
 from schemas import *
-from chain import Chain, protect_abc
-from pipelines.phoneme import Phoneme
+from chain import Chain
+from chains.phoneme import Phoneme
 
 
 class Formants(Chain):
@@ -46,6 +46,11 @@ class Formants(Chain):
 
     def _compute_formants(self, segments_path, phonemes_result_path,
                           formants_result_path):
+        formant_maximum_len = self.process_settings.get('formant_maximum_len',
+                                                        4096)
+        spectrogram_window = self.process_settings.get('spectrogram_window',
+                                                       ('kaiser', 4.0))
+        spectrogram_n = self.process_settings.get('spectrogram_n', 5)
         @check_if_already_done(formants_result_path, self.verbose,
                                lambda bool_val: bool_val)
         def recognize_formants(segments_path, phonemes_result_path,
@@ -56,24 +61,22 @@ class Formants(Chain):
             frequency = wav.frame_rate
             schema = PhonemesSchema()
             with open(phonemes_result_path, 'r') as f:
-                print(f' phonemes_result_path: {phonemes_result_path}')
                 json_file = json.load(f)
                 phonemes_result = schema.load(json_file)
                 phonemes_info = [info for info in phonemes_result['info']
                                  if info['word'] not in self.blacklisted_phonemes]
-                maximum_len = 4096
                 formants_result = []
                 for info in phonemes_info:
                     start, stop = (1000 * info['start'],
                                    1000 * info['end'])
                     segment = np.array(wav[start:stop].get_array_of_samples())
                     freq, t, Sxx = spectrogram(segment, frequency,
-                                               window=('kaiser', 4.0),
-                                               nperseg=min(maximum_len,
+                                               window=spectrogram_window,
+                                               nperseg=min(formant_maximum_len,
                                                            len(segment)),
                                                noverlap=1)
                     for i in range(len(t)):
-                        n = 5
+                        n = spectrogram_n
                         ith_spectrogram = Sxx[:, i]
                         spectrogram_normalized = ith_spectrogram/sum(ith_spectrogram)
                         local_maxima = argrelmax(ith_spectrogram)[0]
@@ -110,10 +113,18 @@ class Formants(Chain):
             print(f'[INFO] audio_path: {audio_path}, phonemes_path: {phonemes_path}')
         _, segments_path = prepare_wav_input(audio_path, datatype, segments,
                                              self.verbose, use_original_frequency=True)
-        self._compute_target(segments_path, phonemes_path, output_path_pattern)
+        self.compute_target(segments_path, phonemes_path, output_path_pattern)
 
-    def _compute_target(self, segments_path, phonemes_path, series_json_path):
-        formants_result_path = self.sample_result_filename(series_json_path)
+    def compute_target(self, segments_path, phonemes_path, output_path_pattern):
+        """
+        Convenient method to reuse sample_layer with other similar chains
+        i.e. only compute_target can be overridden.
+        :param segments_path: absolute path to segments wav (as pointed by the sample json)
+        :param phonemes_path: json with phonemes details (from chain Phoneme)
+        :param output_path_pattern: pattern to produce output path
+        :return: None
+        """
+        formants_result_path = self.sample_result_filename(output_path_pattern)
         self._compute_formants(segments_path, phonemes_path, formants_result_path)
         if self.verbose > 0:
             print(f'[INFO] formants result path: {formants_result_path}')

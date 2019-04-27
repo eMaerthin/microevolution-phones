@@ -10,7 +10,7 @@ from dimensionality_reduction import (draw_X2, animate_language_change, fit_tsne
 from marshmallow import pprint
 from schemas import *
 from chain import Pipeline
-from pipelines.mfcc_pipeline import MfccPipeline
+from chains.mfcc_pipeline import MfccPipeline
 
 class TsnePipelineMfcc(Pipeline):
     def __init__(self):

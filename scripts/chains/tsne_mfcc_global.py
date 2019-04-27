@@ -10,7 +10,7 @@ from dimensionality_reduction import (animate_language_change, draw_X2, fit_tsne
 from marshmallow import pprint
 from schemas import *
 from chain import Pipeline
-from pipelines.mfcc_global_pipeline import MfccGlobalPipeline
+from chains.mfcc_global_pipeline import MfccGlobalPipeline
 
 
 class TsnePipelineMfccGlobal(Pipeline):

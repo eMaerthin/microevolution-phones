@@ -6,8 +6,8 @@ from scipy.signal import spectrogram
 from decorators import check_if_already_done
 from format_converters import get_segment
 from schemas import *
-from pipelines.formants_pipeline import FormantsPipeline
-from pipelines.phoneme_pipeline import PhonemePipeline
+from chains.formants_pipeline import FormantsPipeline
+from chains.phoneme_pipeline import PhonemePipeline
 
 
 class SpectrogramPipeline(FormantsPipeline):
