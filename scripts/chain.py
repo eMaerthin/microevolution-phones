@@ -344,7 +344,7 @@ class Chain(metaclass=protect_abc("load_settings", "merge_data_settings",
         if any((isfile(filename_to_skip) for filename_to_skip
                 in skip_candidates[level](pattern))):
             if self.verbose > 0:
-                print(f'[INFO] detected filenames_to_skip_{level}'
+                print(f'[INFO] detected filenames_to_skip_{level} '
                       f'for {pattern} - hence processing '
                       f'the {level} is skipped')
                 found = [skipper for skipper in skip_candidates[level](pattern)
@@ -398,11 +398,11 @@ class Chain(metaclass=protect_abc("load_settings", "merge_data_settings",
         if not self._check_skip_conditions('subject', output_subject_dir):
             if self.allow_sample_layer_concurrency:
                 p = Pool(cpu_count())
-                p.map(self.wrap_sample_layer, [(sample_json_filename, subject, subject_settings) for sample_json_filename in natsorted(samples)])
+                p.map(self.wrap_sample_layer, [(sample_json_filename, subject, subject_settings) for sample_json_filename in samples])
                 p.close()
                 p.join()
             else:
-                [self.wrap_sample_layer((sample_json_filename, subject, subject_settings)) for sample_json_filename in natsorted(samples)]
+                [self.wrap_sample_layer((sample_json_filename, subject, subject_settings)) for sample_json_filename in samples]
                 #
                 # sample_settings = self.load_settings(join(self.base_dir, subject), sample_json_filename)
                 # output_path_pattern = join(self.results_dir, subject, sample_json_filename)
@@ -468,7 +468,10 @@ class Chain(metaclass=protect_abc("load_settings", "merge_data_settings",
                                 filenames))
             if len(jsons) > 0:
                 subject = dir_path[len(self.base_dir):]
-                subject_samples = (subject, jsons)
+                samples = natsorted(jsons)
+                if 'limit_recordings_per_subject' in self._process_settings:
+                    samples = samples[:self._process_settings['limit_recordings_per_subject']]
+                subject_samples = (subject, samples)
                 if self.verbose > 1:
                     print(f'[DETAILS] Added subject-samples pair: {subject_samples}')
                 dataset.append(subject_samples)
