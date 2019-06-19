@@ -1,13 +1,14 @@
 from abc import ABCMeta, abstractmethod
 from functools import reduce
 import json
+from multiprocessing import cpu_count, Pool
 from os import (makedirs, walk)
 from os.path import (exists, isfile, join)
 
 from natsort import natsorted
 from toposort import toposort_flatten
 
-from schemas import SeriesSchema
+from schemas import SampleSchema
 
 
 def protect_abc(*protected):
@@ -29,7 +30,8 @@ def protect_abc(*protected):
     return Protect
 
 
-class Chain(metaclass=protect_abc("load_settings", "merge_data_settings")):
+class Chain(metaclass=protect_abc("load_settings", "merge_data_settings",
+                                  "dataset_layer", "subject_layer")):
     """
     Base class for concrete chain processes like Phoneme or Spectrogram.
     It stores a dictionary of subclasses class names and class references
@@ -42,6 +44,7 @@ class Chain(metaclass=protect_abc("load_settings", "merge_data_settings")):
      - base_dir (sets parent directory where subjects from the dataset are placed)
      - process_settings (this adjust how to process the chain)
      - results_identifier (stores name of the directory comprising experiment's results)
+     - subjects_pattern (if set, store patterns used to filter subjects)
      - verbose (sets verbosity)
 
      and a read-only property results_dir that holds absolute path of the experiment's results
@@ -64,18 +67,20 @@ class Chain(metaclass=protect_abc("load_settings", "merge_data_settings")):
          * sample_layer that has an implementation specific for each of the subclass
     """
 
-    subclasses = {}
-    s = {}
+    allow_sample_layer_concurrency = False
     ordered_subclasses = []
     requirements = []
+    s = {}
+    subclasses = {}
+    subjects_pattern = []
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
         cls.subclasses[cls.__name__] = cls
         chains_dependencies = {value: set(value.requirements)
                                for value in cls.subclasses.values()}
-        cls.ordered_subclasses[:] = toposort_flatten(chains_dependencies,
-                                                     sort=False)
+        cls.ordered_subclasses[:] = list(toposort_flatten(chains_dependencies,
+                                                          sort=False))
 
     def __init__(self):
         self._base_dir = ''
@@ -141,13 +146,15 @@ class Chain(metaclass=protect_abc("load_settings", "merge_data_settings")):
 
     @classmethod
     def initialize_from_parameters(cls, base_dir, process_settings,
-                                   results_identifier, verbose):
+                                   results_identifier, subjects_pattern,
+                                   verbose):
         """
         Initializes class with given verbose and base_dir values
         :param base_dir: An absolute path to base directory
         :param process_settings: dictionary with settings
         :param results_identifier: name for intermediate folder
         comprising experiment' results
+        :param subjects_pattern: if set, will be used to filter subjects
         :param verbose: verbosity level
         :return:
         """
@@ -155,6 +162,7 @@ class Chain(metaclass=protect_abc("load_settings", "merge_data_settings")):
         pipeline.base_dir = base_dir
         pipeline.process_settings = process_settings
         pipeline.results_identifier = results_identifier
+        pipeline.subjects_pattern = subjects_pattern
         pipeline.verbose = verbose
         return pipeline
 
@@ -194,7 +202,7 @@ class Chain(metaclass=protect_abc("load_settings", "merge_data_settings")):
             for key, value in setting1.items():
                 check_for_conflicts(settings[key], key, value)
 
-        return SeriesSchema().dump(settings)
+        return SampleSchema().dump(settings)
 
     def subject_preprocess(self, subject, samples,
                            common_subject_settings):
@@ -212,18 +220,18 @@ class Chain(metaclass=protect_abc("load_settings", "merge_data_settings")):
 
     @staticmethod
     @abstractmethod
-    def sample_result_filename(sample):
+    def sample_result_filename(out_sample_path):
         """
         A fixed filename relative to the output directory of
         the current subject for storing results of processing each sample
         generated from f-string pattern with {sample} identifier
-        :param sample: filename (most probably sample_json_path)
+        :param out_sample_path: filename (most probably sample_json_path)
         relative to the output directory of the current subject
         :return: filename
         """
 
     @staticmethod
-    def filenames_to_skip_sample(sample):
+    def filenames_to_skip_sample(out_sample_path):
         """
         emergency patterns of the filenames that, if found, will skip
         processing given sample
@@ -234,7 +242,7 @@ class Chain(metaclass=protect_abc("load_settings", "merge_data_settings")):
         return []
 
     @staticmethod
-    def filenames_to_skip_subject(subject):
+    def filenames_to_skip_subject(out_subject_dir):
         """
         emergency patterns of the filenames that, if found, will skip
         processing given subject
@@ -245,7 +253,7 @@ class Chain(metaclass=protect_abc("load_settings", "merge_data_settings")):
         return []
 
     @staticmethod
-    def filenames_to_skip_dataset(dataset):
+    def filenames_to_skip_dataset(out_results_dir):
         """
         emergency patterns of the filenames that, if found, will skip
         processing given dataset
@@ -316,13 +324,12 @@ class Chain(metaclass=protect_abc("load_settings", "merge_data_settings")):
         :return:
         """
 
-    def _check_skip_conditions(self, level, input_data, pattern):
+    def _check_skip_conditions(self, level, pattern):
         """
         This is an internal method to check if conditions to skip
         the current object of interest are met.
 
         :param level: only three values are allowed: 'subject', 'sample' and 'dataset'
-        :param input_data: refers to input paths/hints
         :param pattern: refers to output paths/result filenames
         :return: True/False whether to skip the current object of interest.
         """
@@ -338,7 +345,7 @@ class Chain(metaclass=protect_abc("load_settings", "merge_data_settings")):
                 in skip_candidates[level](pattern))):
             if self.verbose > 0:
                 print(f'[INFO] detected filenames_to_skip_{level}'
-                      f'for {level} {input_data} - hence processing '
+                      f'for {pattern} - hence processing '
                       f'the {level} is skipped')
                 found = [skipper for skipper in skip_candidates[level](pattern)
                          if isfile(skipper)]
@@ -349,7 +356,7 @@ class Chain(metaclass=protect_abc("load_settings", "merge_data_settings")):
                 in prerequisites[level]())):
             if self.verbose > 0:
                 print(f'[WARNING] some prerequisites are not found '
-                      f'for the {level} {input_data} - hence '
+                      f'for the {pattern} - hence '
                       f'processing the {level} is skipped')
                 not_found = [p(pattern) for p in prerequisites[level]()
                              if not isfile(p(pattern))]
@@ -357,6 +364,18 @@ class Chain(metaclass=protect_abc("load_settings", "merge_data_settings")):
             return True
 
         return False
+
+    def wrap_sample_layer(self, args):
+        (sample_json_filename, subject, subject_settings) = args
+        sample_settings = self.load_settings(join(self.base_dir, subject), sample_json_filename)
+        output_path_pattern = join(self.results_dir, subject, sample_json_filename)
+        if self._check_skip_conditions('sample', output_path_pattern):
+            return
+        raise_error = self.process_settings.get("raise_error_on_conflict_values",
+                                                False)
+        sample_settings = self.merge_data_settings(subject_settings, sample_settings,
+                                                   raise_error)
+        self.sample_layer(subject, sample_json_filename, sample_settings)
 
     def subject_layer(self, subject, samples, subject_settings):
         """
@@ -373,16 +392,33 @@ class Chain(metaclass=protect_abc("load_settings", "merge_data_settings")):
         :return: None
         """
         self.subject_preprocess(subject, samples, subject_settings)
-        raise_error = self.process_settings.get("raise_error_on_conflict_values",
-                                                False)
-        for sample_json_filename in natsorted(samples):
-            sample_settings = self.load_settings(join(self.base_dir, subject), sample_json_filename)
-            output_path_pattern = join(self.results_dir, subject, sample_json_filename)
-            if self._check_skip_conditions('sample', sample_json_filename, output_path_pattern):
-                continue
-            sample_settings = self.merge_data_settings(subject_settings, sample_settings,
-                                                       raise_error)
-            self.sample_layer(subject, sample_json_filename, sample_settings)
+        output_subject_dir = join(self.results_dir, subject)
+        makedirs(output_subject_dir, exist_ok=True)
+
+        if not self._check_skip_conditions('subject', output_subject_dir):
+            if self.allow_sample_layer_concurrency:
+                p = Pool(cpu_count())
+                p.map(self.wrap_sample_layer, [(sample_json_filename, subject, subject_settings) for sample_json_filename in natsorted(samples)])
+                p.close()
+                p.join()
+            else:
+                [self.wrap_sample_layer((sample_json_filename, subject, subject_settings)) for sample_json_filename in natsorted(samples)]
+                #
+                # sample_settings = self.load_settings(join(self.base_dir, subject), sample_json_filename)
+                # output_path_pattern = join(self.results_dir, subject, sample_json_filename)
+                # if self._check_skip_conditions('sample', output_path_pattern):
+                #     return
+                # raise_error = self.process_settings.get("raise_error_on_conflict_values",
+                #                                         False)
+                # sample_settings = self.merge_data_settings(subject_settings, sample_settings,
+                #                                            raise_error)
+                # self.sample_layer(subject, sample_json_filename, sample_settings)
+
+            #    Process(target=self.wrap_sample_layer, args=(sample_json_filename, subject, subject_settings, lock)).start()
+            # with Executor(max_workers=4) as exe:
+            #     jobs = [exe.submit(self.wrap_sample_layer, sample_json_filename, subject, subject_settings, lock)
+            #             ]
+            #     [job.result() for job in jobs]
         self.subject_postprocess(subject, samples, subject_settings)
 
     def dataset_layer(self, dataset):
@@ -397,14 +433,14 @@ class Chain(metaclass=protect_abc("load_settings", "merge_data_settings")):
         """
 
         self.dataset_preprocess(dataset)
-        for subject, samples in dataset:
-            input_dir = join(self.base_dir, subject)
-            output_dir = join(self.results_dir, subject)
-            makedirs(output_dir, exist_ok=True)
-            if self._check_skip_conditions('subject', subject, output_dir):
-                continue
-            subject_settings = self.load_settings(input_dir, 'common.json')
-            self.subject_layer(subject, samples, subject_settings)
+        if not self._check_skip_conditions('dataset', self.results_dir):
+            for subject, samples in dataset:
+                if not self.subjects_pattern or any(pattern in subject for pattern in self.subjects_pattern):
+                    input_dir = join(self.base_dir, subject)
+                    subject_settings = self.load_settings(input_dir, 'common.json')
+                    self.subject_layer(subject, samples, subject_settings)
+                elif self.verbose > 0:
+                    print(f'[INFO] subject {subject} discarded due to subjects_pattern {self.subjects_pattern}')
         self.dataset_postprocess(dataset)
 
     def process(self):
@@ -437,8 +473,9 @@ class Chain(metaclass=protect_abc("load_settings", "merge_data_settings")):
                     print(f'[DETAILS] Added subject-samples pair: {subject_samples}')
                 dataset.append(subject_samples)
 
-        assert self.sample_result_filename('').endswith('result.json'),\
-            'verification that sample_result_filename ends with result.json'
+        if self.sample_result_filename('').endswith('.json'):
+            assert self.sample_result_filename('').endswith('result.json'),\
+                'sample_result_filename should end with result.json. '\
+                f'is: {self.sample_result_filename("")}'
 
-        if not self._check_skip_conditions('dataset', dataset, self.results_dir):
-            self.dataset_layer(dataset)
+        self.dataset_layer(dataset)

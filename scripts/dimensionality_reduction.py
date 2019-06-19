@@ -1,39 +1,33 @@
+from collections import OrderedDict
 from functools import reduce
 from itertools import product
+from operator import attrgetter
 from random import shuffle
 
 import matplotlib
 matplotlib.use('TkAgg')
-import matplotlib.pyplot as plt
 from matplotlib.animation import FFMpegWriter
-
-from tqdm import tqdm
-
+import matplotlib.pyplot as plt
 from MulticoreTSNE import MulticoreTSNE as TSNE
 import numpy as np
-from scipy.interpolate import interp2d
 from scipy.spatial.distance import (pdist, squareform)
 from skimage.filters.rank import windowed_histogram
 from skimage.morphology import disk
-#from sklearn.manifold import TSNE
 from sklearn.decomposition import PCA
+from tqdm import tqdm
+
+from schemas import *
 
 NORMALIZATION_FACTOR = 1.0  # 8.0  # 255.0
 
 
-def fit_tsne(list_X, n_components=2, perplexity=30, n_iter=1000, n_iter_without_progress=300, verbose=0):
+def fit_tsne(x, n_components=2, perplexity=30, n_iter=1000, n_iter_without_progress=300, verbose=0):
     assert (n_components is 2)
-    X = np.concatenate(list_X)
-    z, _ = reduce(lambda cum, cur: (cum[0] + ([cum[1]] * len(cur)), cum[1] + 1), list_X, ([], 0))
     tsne = TSNE(n_jobs=4, n_components=n_components, perplexity=perplexity,
-                n_iter=n_iter, n_iter_without_progress=n_iter_without_progress)
-    tsne_out = tsne.fit_transform(X)
-    if verbose > 0:
-        print(f'tsne.kl_divergence: {tsne.kl_divergence_}')
-    Xs = []
-    for i in range(len(list_X)):
-        Xs.append([xj for xj, zj in zip(tsne_out, z) if zj == i])
-    return Xs
+                n_iter=n_iter, n_iter_without_progress=n_iter_without_progress,
+                verbose=verbose)
+    tsne_out = tsne.fit_transform(x)
+    return tsne_out
 
 
 def fit_pca(list_X, n_components=2, verbose=0):
@@ -49,10 +43,6 @@ def fit_pca(list_X, n_components=2, verbose=0):
         print(f' pca singular values: {pca.singular_values_}')
     return pca
 
-def draw_centers(Xs, ys, result_path, n_components=2, verbose=0):
-    assert(n_components is 2)
-    fig, ax = plt.subplots(nrows=1, ncols=1)
-
 
 def parse_validation(validation=None):
     validated = False
@@ -61,7 +51,7 @@ def parse_validation(validation=None):
     return validated
 
 
-def draw_composition(Xs, ys, result_path, n_components=2, verbose=0,
+def draw_composition(Xs, ys, result_path, verbose=0,
                      out_shape=None, agg_shape=None, drawing_subsamples=False,
                      sup_title=None, validation=None):
     if not out_shape:
@@ -70,7 +60,6 @@ def draw_composition(Xs, ys, result_path, n_components=2, verbose=0,
         agg_shape = (1, 1)
     estimated_series_size = agg_shape[1] * out_shape[1]
     assert(agg_shape[0] * agg_shape[1] * out_shape[0] * out_shape[1] is len(ys))
-    assert n_components is 2, f'it should be 2 - currently it is {n_components}'
     len_x_vector = len(Xs)
     assert(len_x_vector == len(ys))
     fig_rows, fig_cols = out_shape
@@ -196,7 +185,7 @@ def draw_composition(Xs, ys, result_path, n_components=2, verbose=0,
     # plt.show()
 
 
-def draw_X(Xs, result_path, n_components=2, verbose=0,
+def draw_X(Xs, result_path, verbose=0,
            out_shape=None, agg_shape=None, drawing_subsamples=False,
            sup_title=None, validation=None):
     if not out_shape:
@@ -205,7 +194,6 @@ def draw_X(Xs, result_path, n_components=2, verbose=0,
         agg_shape = (1, 1)
     estimated_series_size = agg_shape[1] * out_shape[1]
     assert agg_shape[0] * agg_shape[1] * out_shape[0] * out_shape[1] is len(Xs), f'{agg_shape[0] * agg_shape[1] * out_shape[0] * out_shape[1]} vs {len(Xs)}'
-    assert n_components is 2, f'it should be 2 - currently it is {n_components}'
     fig_rows, fig_cols = out_shape
     validation_correct = parse_validation(validation)
     if validation_correct:
@@ -311,7 +299,7 @@ def draw_X(Xs, result_path, n_components=2, verbose=0,
     # plt.show()
 
 
-def draw_X2(Xs, result_path, n_components=2, verbose=0,
+def draw_X2(Xs, result_path, verbose=0,
            out_shape=None, agg_lists=None, drawing_subsamples=False,
            sup_title=None, validation=None):
     def split_seq(seq, size):
@@ -328,7 +316,6 @@ def draw_X2(Xs, result_path, n_components=2, verbose=0,
     symmetric_diff = set([item for s in agg_lists for item in s]).symmetric_difference(range(len(Xs)))
     assert len(symmetric_diff) is 0, f'agg_lists: {agg_lists}, symmetric_difference with range({len(Xs)}) is: {symmetric_diff}'
     assert len(agg_lists) == (out_shape[0] * out_shape[1]), f'{len(agg_lists)} vs {out_shape[0] * out_shape[1]}'
-    assert n_components is 2, f'it should be 2 - currently it is {n_components}'
     fig_rows, fig_cols = out_shape
     validation_correct = parse_validation(validation)
     if validation_correct:
@@ -341,7 +328,7 @@ def draw_X2(Xs, result_path, n_components=2, verbose=0,
 
     axes1d = axes.flatten()
     indices = agg_lists
-
+    print(indices)
     x_list = []
     t_list = []
 
@@ -359,6 +346,8 @@ def draw_X2(Xs, result_path, n_components=2, verbose=0,
         if sup_title:
             sup_title = sup_title + f' remaining pts: {min_samples}'
     metrics = []
+    print(x_list[0])
+    # print((list(zip(*x_list))[0][1]))
     min_x1, min_x2, max_x1, max_x2 = \
         reduce(lambda cum, cur: (min(cum[0], min(cur[0])),
                                  min(cum[1], min(cur[1])),
@@ -446,68 +435,379 @@ def draw_X2(Xs, result_path, n_components=2, verbose=0,
                 l.set_data(p2_x1[max(0, i - 5):i], p2_x2[max(0, i - 5):i])
                 writer.grab_frame()
 
-    # plt.show()
 
-def animate_language_change(tsne_X, animated_result_path, verbose=0,
-                            points=20000, jump=1000, reverted=False, dpi=100,
-                            fps=60, save_pngs=False, format='mp4', metadata=None,
-                            scatter_alpha = 0.0, meshgrid_alpha = 1.0):
-    '''
-    metadata = dict(title='Movie Test', artist='Matplotlib',
-                    comment='Movie support!')
-    '''
+def preprocess_events(events):
+    """
+    preprocess_events populates list of Converters and scales timestamps to [0,1]
+    :param events:
+    :return:
+    """
+    colors = ["red", "green", "blue", "orange", "purple", "pink", "yellow"]
+    subjects = [event.subject for event in events]
+    labels = [event.label for event in events]
+    unique_subjects = sorted(list(set(subjects)))
+    unique_labels = sorted(list(set(labels)))
+    converters = dict()
+    for subject in unique_subjects:
+        color = colors[unique_subjects.index(subject) % len(colors)]
+        color_labels = {label: colors[unique_labels.index(label) % len(colors)] for label in labels}
+        timestamp_min = min([event.timestamp for event in events if event.subject == subject])
+        timestamp_max = max([event.timestamp for event in events if event.subject == subject])
+        time_scale = timestamp_max - timestamp_min
+        converter = Converter(subject, timestamp_min,
+                              timestamp_max, time_scale,
+                              color, color_labels)
+        converters[subject] = converter
+
+    def update_timestamp(timestamp, subject):
+        c = converters[subject]
+        return (timestamp - c.timestamp_min) / c.time_scale
+
+    scaled_events = [event._replace(timestamp=update_timestamp(event.timestamp,
+                                               event.subject)) for event in events]
+    sorted_events = sorted(scaled_events, key=attrgetter('timestamp'))
+    return sorted_events, converters
+
+
+def split_events_by_offset(events, split_params):
+    split = []
+    frame_id = []
+    points = split_params.get('points', 20000)
+    jump = split_params.get('jump', 1000)
+    for start_idx in range(0, len(events) - points, jump):
+        split.append(events[start_idx:start_idx + points].copy())
+        frame_id.append(start_idx/points)
+    return split, frame_id
+
+
+def split_events_by_lifespan(events, split_params):
+    split = []
+    frame_id = []
+    lifespan = split_params.get('lifespan', 120)
+    subjects = set((event.subject for event in events))
+    for subject in subjects:
+        subject_events = [event for event in events if event.subject == subject]
+        def by_timestamp_raw(obj):
+            return obj.timestamp_raw
+        subject_events.sort(key=by_timestamp_raw)
+        start_t = subject_events[0].timestamp_raw
+        stop_t = subject_events[-1].timestamp_raw
+        print(f'start - stop: {start_t} - {stop_t}')
+        t = start_t
+        while t <= stop_t:
+            current_events = [event for event in subject_events if t <= event.timestamp_raw < t + lifespan]
+            if len(current_events) > 0:
+                split.append(current_events)
+                frame_id.append((t - start_t) / lifespan)
+            t = min([event.timestamp_raw for event in events if event.timestamp_raw >= t + lifespan] + [stop_t + 1.0])
+    split_id = zip(split, frame_id)
+    sorted_id = sorted(split_id, key=lambda x: x[1])
+    (split_sorted, frame_id_sorted) = tuple(zip(*sorted_id))
+    return split_sorted, frame_id_sorted
+
+
+def split_events_by_recordings(events, split_params):
+    """
+    The implementation of the split strategy "recordings" where each blob corresponds to unique (subject,sample) tuple
+    and has id corresponding to which sample of the given subject it is
+    (assuming samples are ascending with the timestamp)
+    :param events: events that need a split
+    :param split_params: not used
+    :return:
+    """
+    split = []
+    frame_id = []
+    samples = OrderedDict.fromkeys([(event.subject, event.sample) for event in events])
+    subjects = set((event.subject for event in events))
+    subject_counters = {subject: 0 for subject in subjects}
+    for subject, sample in samples.keys():
+        split.append([event for event in events if event.sample == sample and event.subject == subject])
+        frame_id.append(subject_counters[subject])
+        subject_counters[subject] += 1
+    return split, frame_id
+
+
+def split_events_by_fitting_to_shape(events, split_params):
+    out_shape = split_params.get('out_shape', (1, 1))
+    strategy_params = split_params.get('additional_params', None)
+
+    if out_shape is (1, 1) or not strategy_params:
+        split = [events]
+        frame_id = [0]
+        return split, frame_id
+    subjects = list(set(event.subject for event in events))
+    subjects.sort()
+    # the above line is faster than OrderedDict.fromkeys(event.subject for event in events)
+
+    assert(out_shape[0] == len(subjects))
+
+    keys = range(out_shape[0] * out_shape[1])
+    items = [(key, []) for key in keys]
+    split_dict = OrderedDict(items)  # .fromkeys(range(out_shape[0] * out_shape[1]))  # [None] * out_shape[0] * out_shape[1]
+
+    for i, subject in enumerate(subjects):
+        print(f'subject: {subject}')
+        subject_events = [event for event in events if event.subject == subject]
+
+        print(f' subject, before split: {set([event.subject for event in subject_events])}')
+        print(f' subject, before split: {len([event for event in subject_events])}')
+
+        current_splits, current_frame_ids = split_events(subject_events, strategy_params)
+
+        print(f' subject, after split: {set([event.subject for event_packet in current_splits for event in event_packet])}')
+        print(f' subject, after split: {len([event for event_packet in current_splits for event in event_packet])}')
+        # split_length = len(split_and_frame_ids)
+        max_frame_id = current_frame_ids[-1]
+        for current_split, current_frame_id in zip(current_splits, current_frame_ids):
+            index = i * out_shape[1] + ( (current_frame_id * out_shape[1]) // (max_frame_id + 1) )
+            if index in split_dict:
+                split_dict[index].extend(current_split)
+            else:
+                raise IndexError('invalid index')
+
+    split = list(split_dict.values())
+    frame_id = list(split_dict.keys())
+    return split, frame_id  # tuple(zip(*sorted_id))  # (split_sorted, frame_id_sorted)
+
+
+
+
+
+def split_events(events, split_params):
+    strategy = split_params.get('strategy', 'offset')
+    split_func = {'offset': split_events_by_offset,
+                  'lifespan': split_events_by_lifespan,
+                  'recordings': split_events_by_recordings,
+                  'fit_to_shape': split_events_by_fitting_to_shape}
+    return split_func[strategy](events, split_params)
+
+
+def compute_histogram(events, bins, selem):
+    xs = np.array([event.x for event in events])
+    x1, x2 = zip(*xs)
+    h, _, _ = np.histogram2d(x1, x2, bins=bins, density=False)  # , bins=(xedges, yedges))
+    hist_img = windowed_histogram(h.astype(np.uint8), selem)
+    hist_img_max = h.copy()
+    for ix, iy in np.ndindex(hist_img_max.shape):
+        hist_img_max[ix, iy] = np.sum(
+            [NORMALIZATION_FACTOR * i_elem * elem for i_elem, elem in enumerate(hist_img[ix][iy])])
+    h = hist_img_max.T  # h.T
+    return h
+
+
+def animate_language_change(events, converters, animated_result_path, split_params, bins=(30, 30),
+                            disk_radius=2, reverted=False, dpi=100, fps=60, save_pngs=False, metadata=None,
+                            scatter_alpha=0.0, meshgrid_alpha=1.0, separate_subject=None, verbose=None):
     writer = FFMpegWriter(fps=fps, metadata=metadata)
     assert save_pngs is False, 'currently we do not support saving pngs'
     fig = plt.figure()
     if reverted:
-        tsne_X = tsne_X[::-1]
+        events[:] = events[::-1]
+    event_split, frame_ids = split_events(events, split_params)
+    xs = np.array([event.x for event in events])
+    min_x1, min_x2 = np.amin(xs, axis=0)
+    max_x1, max_x2 = np.amax(xs, axis=0)
+    x_edges = np.linspace(min_x1, max_x1, bins[0], endpoint=True)
+    y_edges = np.linspace(min_x2, max_x2, bins[1], endpoint=True)
+    m1, m2 = np.meshgrid(x_edges, y_edges)
+    results = []
+    vmax = 0
+    for event_packet, frame_ids in zip(event_split, frame_ids):
+        histogram = compute_histogram(event_packet, (x_edges, y_edges), disk(disk_radius))
+        results.append((histogram, event_packet, frame_ids))
+        vmax = max(vmax, np.max(histogram))
 
-    def to_list_if_needed(maybe_list):
-        if isinstance(maybe_list, list):
-            return maybe_list
-        return maybe_list.tolist()
-    x_list = [to_list_if_needed(x) for s in tsne_X for x in s]
-    #x_list = []
-    #x_list.append(sum((x for x in tsne_X), []))
-
-    print(x_list[:5])
-    x1, x2 = zip(*x_list)
-    min_x1 = min(x1)
-    min_x2 = min(x2)
-    max_x1 = max(x1)
-    max_x2 = max(x2)
-
-    bins = [30, 30]  # [41, 41]  # [7, 7]  # [41, 41]
-    disk_radius = 2  # 6  # 6  # 3  # 6
-
-    vmax = None
     with writer.saving(fig, animated_result_path, dpi):
-        for start_idx in tqdm(range(0, len(x_list) - points, jump)):
+        for (h, event_packet, frame_ids) in tqdm(results):
             plt.clf()
-
             plt.xlim(min_x1, max_x1)
             plt.ylim(min_x2, max_x2)
-            x = x_list[start_idx:start_idx + points]
-            x1, x2 = zip(*x)
+            event_data = [(event.x[0], event.x[1], converters[event.subject].color_labels[event.label],
+                           event.subject, event.label) for event in event_packet]
+            x1, x2, color, subject, labels = zip(*event_data)
             if scatter_alpha > 0.0:
-                plt.plot(x1, x2, 'k.', alpha=scatter_alpha)
+                if separate_subject:
+                    plt.scatter(x1, x2, c=color, alpha=scatter_alpha)  # , label = separate_subject)
+                else:
+                    for s in converters.keys():
+                        plt.scatter(x1, x2, c=color, alpha=scatter_alpha, label=s)
+            # for label, x, y in zip(labels, x1, x2):
+            #     plt.annotate(label, xy=(x, y), bbox=dict(boxstyle='round,pad=0.5', fc='yellow', alpha=0.35))
             if meshgrid_alpha > 0.0:
-
-                h, x_edges, y_edges = np.histogram2d(x1, x2, bins=bins, density=False,
-                                                     range=[[min_x1, max_x1], [min_x2, max_x2]])  # , bins=(xedges, yedges))
-                h = h.astype(np.uint8)
-
-                hist_img = windowed_histogram(h, disk(disk_radius))
-
-                hist_img_max = h.copy()
-
-                for ix, iy in np.ndindex(hist_img_max.shape):
-                    hist_img_max[ix, iy] = np.sum(
-                        [NORMALIZATION_FACTOR * i_elem * elem for i_elem, elem in enumerate(hist_img[ix][iy])])
-                h = hist_img_max.T  # h.T
-                m1, m2 = np.meshgrid(x_edges, y_edges)
-                if not vmax:
-                    vmax = np.max(h)
                 plt.pcolormesh(m1, m2, h, zorder=1, cmap='gray_r', vmin=0.0, vmax=vmax,
                                alpha=meshgrid_alpha)  # cmap='RdBu')
+            # plt.legend(list(converters.keys()), loc='upper right')
+            # legend = plt.gca().get_legend()
+            # [handle.set_color(converters[handle.get_label()].color) for handle in legend.legendHandles]
+            title = f'frame: {frame_ids:.2f}'
+            if separate_subject:
+                title = 'subject: ' + separate_subject + ' - ' + title
+            plt.gca().set_title(title)
+
             writer.grab_frame()
+
+
+def draw_metrics(result_path, events, converters, split_params=None,
+                bins=(30, 30), disk_radius=2,
+                verbose=0, out_shape=None, drawing_subsamples=False,
+                sup_title=None, validation=None):
+
+    event_split, frame_ids = split_events(events, split_params)
+    xs = np.array([event.x for event in events])
+    min_x1, min_x2 = np.amin(xs, axis=0)
+    max_x1, max_x2 = np.amax(xs, axis=0)
+    if verbose > 0:
+        print(f'[DEBUG] limits: {(min_x1, min_x2, max_x1, max_x2)}')
+
+    x_edges = np.linspace(min_x1, max_x1, bins[0], endpoint=True)
+    y_edges = np.linspace(min_x2, max_x2, bins[1], endpoint=True)
+    min_samples = np.inf
+    if drawing_subsamples:
+        for event_packet in event_split:
+            if verbose > 0:
+                print(f'[DEBUG] checking minimum len(x). current: {len(event_packet)}, minimum so far: {min_samples}')
+            min_samples = min(min_samples, len(event_packet))
+
+    titles = []
+    metrics = []
+    subjects_ids = []
+    subjects = list(set([event.subject for event in events]))
+
+    for event_packet, frame_idx in zip(event_split, frame_ids):
+
+        if drawing_subsamples:
+            shuffle(event_packet)
+            event_packet = event_packet[:min_samples]
+        histogram = compute_histogram(event_packet, (x_edges, y_edges), disk(disk_radius))
+        hs_vector = histogram.reshape(-1)
+        metrics.append(hs_vector)
+        titles.append(f'{event_packet[0].subject}_{frame_idx}')  # -{event_packet[0].sample}')
+        subjects_ids.append(1 + subjects.index(event_packet[0].subject) + 0.1/(1+frame_idx))
+
+    fig, axes = plt.subplots(nrows=1, ncols=1, sharex=True, sharey=True, squeeze=False)
+    axes1d = axes.flatten()
+    mng = plt.get_current_fig_manager()
+    mng.resize(*mng.window.maxsize())
+    part2_x = np.array(metrics)
+    print(len(part2_x))
+    print(part2_x.shape)
+    part2_tsne = fit_tsne(part2_x)
+
+    if verbose > 0:
+        print(f'tsne: {part2_tsne}')
+    p2_x1, p2_x2 = zip(*part2_tsne)
+    colours = ['red', 'green', 'blue', 'black', 'magenta', 'yellow', 'purple']
+    color = [i for s in [[c] * out_shape[1] for c in colours[:out_shape[0]]] for i in s]
+    for ax in tqdm(axes1d):
+        # ax.scatter(p2_x1, p2_x2, c=range(len(titles)), cmap='gray_r')  # , c=color)
+        ax.scatter(p2_x1, p2_x2, c=subjects_ids)  # , c=color)
+        #for (i, (x, y, title)) in enumerate(zip(p2_x1, p2_x2, titles)):
+        #    ax.text(x, y, title)
+    result_path_dynamics = f'{result_path[:-4]}_dynamics.png'
+    plt.savefig(result_path_dynamics, dpi='figure', frameon=True, bbox_inches=None)
+
+def draw_events(result_path, events, converters, split_params=None,
+                bins=(30, 30), disk_radius=2,
+                verbose=0, out_shape=None, drawing_subsamples=False,
+                sup_title=None, validation=None):
+
+    split_params = {'strategy': 'fit_to_shape',
+                    'additional_params': split_params,
+                    'out_shape': out_shape}
+    print(f' before split: {set([event.subject for event in events])}')
+    print(f' before split: {len([event for event in events])}')
+
+    event_split, frame_ids = split_events(events, split_params)
+
+    print(f' after split: {set([event.subject for event_packet in event_split for event in event_packet ])}')
+    print(f' after split: {len([event for event_packet in event_split for event in event_packet])}')
+    print(frame_ids)
+    xs = np.array([event.x for event in events])
+    min_x1, min_x2 = np.amin(xs, axis=0)
+    max_x1, max_x2 = np.amax(xs, axis=0)
+    if verbose > 0:
+        print(f'[DEBUG] limits: {(min_x1, min_x2, max_x1, max_x2)}')
+
+    x_edges = np.linspace(min_x1, max_x1, bins[0], endpoint=True)
+    y_edges = np.linspace(min_x2, max_x2, bins[1], endpoint=True)
+    m1, m2 = np.meshgrid(x_edges, y_edges)
+    vmax = 0
+    if drawing_subsamples:
+        min_samples = np.inf
+        for event_packet in event_split:
+            if verbose > 0:
+                print(f'[DEBUG] checking minimum len(x). current: {len(event_packet)}, minimum so far: {min_samples}')
+            min_samples = min(min_samples, len(event_packet))
+
+        if sup_title:
+            sup_title = sup_title + f' remaining pts: {min_samples}'
+
+    result_frames = {}
+    titles = []
+    for event_packet, frame_idx in zip(event_split, frame_ids):
+        if drawing_subsamples:
+            shuffle(event_packet)
+            event_packet = event_packet[:min_samples]
+        histogram = compute_histogram(event_packet, (x_edges, y_edges), disk(disk_radius))
+        hs_vector = histogram.reshape(-1)
+        assert frame_idx not in result_frames
+        assert 0 <= frame_idx < out_shape[0] * out_shape[1]
+        result_frames[frame_idx] = (histogram, hs_vector, event_packet)
+        titles.append(f'{event_packet[0].sample}')  # -{event_packet[0].sample}')
+
+        vmax = max(vmax, np.max(histogram))
+
+    fig_rows, fig_cols = out_shape
+    validation_correct = parse_validation(validation) # validation is used to put validation information into the last column
+    if validation_correct:
+        fig_cols += 1
+    plt.rcParams.update({'font.size': 10})
+    fig, axes = plt.subplots(nrows=fig_rows, ncols=fig_cols, sharex=True, sharey=True, squeeze=False)
+    mng = plt.get_current_fig_manager()
+    mng.resize(*mng.window.maxsize())
+    mng.window.state('zoomed')
+
+    axes1d = axes.flatten()
+    metrics = []
+    for i, ax in tqdm(enumerate(axes1d)):
+        ax.set(aspect='equal')
+
+        if i not in result_frames:
+            continue
+        (histogram, hs_vector, event_packet) = result_frames[i]
+        metrics.append(hs_vector)
+        # titles.append(f'{set([event.subject for event in event_packet])}')  # -{event_packet[0].sample}')
+        x1 = [event.x[0] for event in event_packet]
+        x2 = [event.x[1] for event in event_packet]
+        # TODO: collect all parameters and enable their custom configuration
+        ax.scatter(x1, x2, c='red', s=1, zorder=2, alpha=0.0015)
+        # ax.set_title(title, fontsize=8)
+        ax.pcolormesh(m1, m2, histogram, zorder=1, vmin=0.0,  # vmax=vmax,
+                      cmap='gray_r')  # cmap='RdBu') #, shading='gouraud') #150) #0.0001) # cmap='RdBu',
+    plt.savefig(result_path, dpi=450, frameon=True, bbox_inches=None)
+
+    fig, axes = plt.subplots(nrows=1, ncols=1, sharex=True, sharey=True, squeeze=False)
+    axes1d = axes.flatten()
+    mng = plt.get_current_fig_manager()
+    mng.resize(*mng.window.maxsize())
+    part2_x = np.array(metrics)
+    print(len(part2_x))
+    print(part2_x.shape)
+    #exit(-1)
+    part2_tsne = fit_tsne(part2_x, perplexity=1)
+
+    if verbose > 0:
+        print(f'tsne: {part2_tsne}')
+    p2_x1, p2_x2 = zip(*part2_tsne)
+    colours = ['red', 'green', 'blue', 'black', 'magenta', 'yellow', 'purple']
+    color = [i for s in [[c] * out_shape[1] for c in colours[:out_shape[0]]] for i in s]
+    for ax in tqdm(axes1d):
+        ax.scatter(p2_x1, p2_x2, c=range(len(titles)), cmap='gray_r')  # , c=color)
+        for (i, (x, y, title)) in enumerate(zip(p2_x1, p2_x2, titles)):
+            ax.text(x, y, title)
+    result_path_dynamics = f'{result_path[:-4]}_dynamics.png'
+    plt.savefig(result_path_dynamics, dpi='figure', frameon=True, bbox_inches=None)
+    # animated_path_dynamics = f'{result_path[:-4]}_animated_dynamics.mp4'
+
+
+

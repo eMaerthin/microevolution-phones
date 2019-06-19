@@ -6,12 +6,12 @@ from scipy.signal import spectrogram
 from decorators import check_if_already_done
 from format_converters import get_segment
 from schemas import *
-from chains.formants_pipeline import FormantsPipeline
-from chains.phoneme_pipeline import PhonemePipeline
+from chains.formants import Formants
+from chains.phoneme import Phoneme
 
 
-class SpectrogramPipeline(FormantsPipeline):
-
+class SpectrogramPipeline(Formants):
+    requirements = [Phoneme]
     @staticmethod
     def result_filename(json_path):
         return f'{json_path[:-5]}_spectrogram_result.json'
@@ -20,7 +20,7 @@ class SpectrogramPipeline(FormantsPipeline):
     def filename_prerequisites():
         def audio_path(json_path):
             return f'{json_path[:-5]}_audio.mp4'
-        return [audio_path, PhonemePipeline.result_filename]
+        return [audio_path, Phoneme.result_filename]
 
     @staticmethod
     def result_filename_postprocessed(json_path):
@@ -33,12 +33,12 @@ class SpectrogramPipeline(FormantsPipeline):
             print(segments_path)
             wav = get_segment(segments_path, 'wav')
             frequency = wav.frame_rate
-            schema = PhonemesSchema()
+            schema = DecoderOutputSchema()
             with open(phonemes_result_path, 'r') as f:
                 print(f' phonemes_result_path: {phonemes_result_path}')
                 json_file = json.load(f)
                 phonemes_result = schema.load(json_file)
-                phonemes_info = [info for info in phonemes_result['info']
+                phonemes_info = [info for info in phonemes_result['segment_info']
                                  if info['word'] not in self.blacklisted_phonemes]
                 spectrograms_result = []
                 for info in phonemes_info:

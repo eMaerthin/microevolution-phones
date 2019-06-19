@@ -1,8 +1,8 @@
 
 import datetime as dt
 from functools import reduce
-from os.path import (isfile, join)
-from urllib.error import URLError
+import os
+from os.path import (basename, dirname, exists, join, split)
 
 import json
 from pydub import AudioSegment
@@ -16,6 +16,32 @@ from tqdm import tqdm
 import easygui as g
 
 
+class PytubePublishedDateRetrieval(compat.HTMLParser):
+    vid_published_date = None
+    vid_published_timestamp = None
+
+    def handle_starttag(self, tag, attrs):
+        if tag == 'meta':
+            if attrs[0] == ('itemprop', 'datePublished'):
+                self.vid_published_date = dt.datetime.strptime(attrs[1][1], '%Y-%m-%d').date()
+                self.vid_published_timestamp = dt.datetime.strptime(attrs[1][1], '%Y-%m-%d').timestamp()
+
+
+def retrieve_datetime_info_from_yt(yt):
+    html_parser = PytubePublishedDateRetrieval()
+    html_parser.feed(yt.watch_html)
+    published_date = html_parser.vid_published_date
+    published_timestamp = html_parser.vid_published_timestamp
+    html_parser.close()
+    return [published_date, published_timestamp, yt.length]
+
+
+@retry(KeyError, tries=5, delay=1, backoff=2)
+def retrieve_datetime_info(url):
+    yt = YouTube(url)
+    return retrieve_datetime_info_from_yt(yt)
+
+
 def process_playlist_url(verbose=1, **kwargs):
     root = Tk()
     url = g.enterbox(msg='Paste url containing playlist link',
@@ -25,49 +51,49 @@ def process_playlist_url(verbose=1, **kwargs):
                                title='Select directory',
                                default='/Volumes/Transcend/phd/subjects/microevolution-lang-phones-data/subjects')
     assert output_path
-    entered = g.multenterbox(msg='Enter subject id', title='Metadata details',
-                             fields=['subject', 'language', 'country', 'state', 'profession', 'birth year'],
-                             values=['', 'en', 'us', '', 'vlogger', ''])
+    entered = g.multenterbox(msg='Enter subject metadata', title='Metadata',
+                             fields=['subject', 'language', 'country', 'state',
+                                     'profession', 'birth year',
+                                     'intro duration [s]', 'outro duration [s]'],
+                             values=['', 'en', 'us', '', 'vlogger', '', '0.0', '0.0'])
     assert entered
-    [subject, language, country, state, profession, birth_year] = entered
-    gender = g.choicebox(msg='Pick a gender', title='Metadata::Gender', choices=['male', 'female', 'unknown'])
+    [subject, language, country, state, profession, birth_year, intro, outro] = entered
+    gender = g.choicebox(msg='Pick a gender of the subject', title='Metadata::Gender', choices=['male', 'female', 'unknown'])
     assert gender
     root.destroy()
-    common = {'datatype':'mp4', 'metadata': {'subject': subject, 'language': language, 'gender': gender,
-                                             'country': country, 'state': state, 'profession': profession,
-                                             'birth_year': birth_year, 'list': 'list.txt'}}
+    common = {'datatype': 'mp4',
+              'metadata': {'subject': subject, 'language': language,
+                           'gender': gender, 'country': country,
+                           'state': state, 'profession': profession,
+                           'birth_year': birth_year,
+                           'list_filename': 'list.txt',
+                           'playlist_url': url,
+                           'intro_duration': intro,
+                           'outro_duration': outro}}
     download_youtube_playlist(url, output_path, common, verbose)
-    success = prepare_jsons(output_path, common)
-    print(success)
+    success = prepare_jsons(output_path, common, verbose)
+    if verbose > 0:
+        print(f'[INFO] success status: {success}')
 
 
-def prepare_jsons(output_path, common, metadata_needed=True):
+def prepare_jsons(output_path, common, verbose, metadata_needed=True):
     if not common:
+        if verbose > 0:
+            print(f'[WARNING] invalid common: {common}')
         return False
     if 'metadata' not in common.keys():
+        if verbose > 0:
+            print(f'[WARNING] metadata not in common.keys: {common.keys()}')
         return False
-    if 'list' not in common['metadata'].keys():
+    if 'list_filename' not in common['metadata'].keys():
+        if verbose > 0:
+            print(f'[WARNING] list_filename not in common[metadata].keys: {common["metadata"].keys()}')
         return False
-    urls = join(output_path, common['metadata']['list'])
-    if not isfile(urls):
+    urls = join(output_path, common['metadata']['list_filename'])
+    if not exists(urls):
+        if verbose > 0:
+            print(f'[WARNING] not existing urls: {urls}')
         return False
-
-    class PytubePublishedDateRetrieval(compat.HTMLParser):
-        vid_published_date = None
-
-        def handle_starttag(self, tag, attrs):
-            if tag == 'meta':
-                if attrs[0] == ('itemprop', 'datePublished'):
-                    self.vid_published_date = dt.datetime.strptime(attrs[1][1], '%Y-%m-%d').date()
-
-    @retry(KeyError, tries=5, delay=1, backoff=2)
-    def retrieve_published_date_and_recorded_length(url):
-        yt = YouTube(url)
-        html_parser = PytubePublishedDateRetrieval()
-        html_parser.feed(yt.watch_html)
-        published_date = html_parser.vid_published_date
-        html_parser.close()
-        return [published_date, yt.length]
 
     with open(urls, 'r') as f:
         for i, line in tqdm(enumerate(f)):
@@ -75,9 +101,11 @@ def prepare_jsons(output_path, common, metadata_needed=True):
             new_json = join(output_path, f'{i}.json')
             if metadata_needed:
                 metadata = {}
-                [published_date, length_in_seconds] = retrieve_published_date_and_recorded_length(url)
+                args = retrieve_datetime_info(url)
+                (published_date, published_timestamp, length_in_seconds) = args
                 metadata['published_date'] = str(published_date)
-                metadata['length_in_seconds'] = length_in_seconds
+                metadata['published_timestamp'] = float(published_timestamp)
+                metadata['length_in_seconds'] = int(length_in_seconds)
                 if 'birth_year' in common['metadata'].keys():
                     if common['metadata']['birth_year'].isdecimal():
                         age = published_date.year - int(common['metadata']['birth_year'])
@@ -100,7 +128,7 @@ def download_youtube_playlist(url, output_path, common, verbose):
     @retry(KeyError, tries=3, delay=1, backoff=2)
     def download_playlist(url, list_path, verbose):
         if verbose > 0:
-            print(f' trying to download youtube playlist {url}')
+            print(f'[INFO] trying to download youtube playlist {url}')
         pl = Playlist(url)
         pl.populate_video_urls()
         with open(list_path, 'w') as f:
@@ -110,47 +138,55 @@ def download_youtube_playlist(url, output_path, common, verbose):
     download_playlist(url, list_path, verbose)
 
 
-def download_youtube_url(url, datatype, output_path, filename, lang_code,
+def resolve_caption_path(output_path_pattern, lang_code):
+    filename = basename(f'{output_path_pattern[:-5]}_audio')
+    output_path = dirname(output_path_pattern)
+    return join(output_path, f'{filename}_{lang_code}.captions')
+
+
+def download_youtube_url(url, datatype, output_path_pattern, lang_code,
                          verbose):
-    audio_path = join(output_path, f'{filename}.{datatype}')
-    caption_path = join(output_path, f'{filename}.captions')
+    audio_path = resolve_audio_path(url, datatype, output_path_pattern)
+    caption_path = resolve_caption_path(output_path_pattern, lang_code)
+    ignore_already_done = False
 
-    @check_if_already_done(audio_path, verbose)
+    @check_if_already_done(audio_path, verbose, ignore_already_done)
     @retry(KeyError, tries=7, delay=1, backoff=2)
-    def download_audio(url, datatype, output_path, filename, verbose):
+    def download_audio(yt, datatype, audio_path, verbose):
         if verbose > 0:
-            print(f' trying to download youtube movie {url}')
-        yt = YouTube(url)
-        audio_stream = yt.streams.filter(subtype=datatype).order_by('itag').asc().first()
-        assert(audio_stream is not None)
+            print(f'[INFO] trying to download youtube movie {url}')
+        stream = yt.streams.filter(subtype=datatype).order_by('itag').asc().first()
+        assert(stream is not None)
         if verbose > 0:
-            print(f'Found valid audio stream: {audio_stream}')
-        audio_stream.download(output_path=output_path, filename=filename)
+            print(f'[INFO] Found valid stream: {stream}')
+        output_path, filename = split(f'{audio_path[:-4]}')
+        stream.download(output_path=output_path, filename=filename)
 
-    @check_if_already_done(caption_path, verbose)
-    @retry(KeyError, tries=3, delay=1, backoff=2)
-    def download_caption(url, caption_path, lang_code, verbose):
-        yt = YouTube(url)
+    @check_if_already_done(caption_path, verbose, ignore_already_done)
+    @retry(KeyError, tries=7, delay=1, backoff=2)
+    def download_caption(yt, caption_path, lang_code, verbose):
         if lang_code is None:
             lang_code = 'en' # by default
-            try:
-                caption = yt.captions.get_by_language_code(lang_code)
-                if caption is not None:
-                    if verbose > 0:
-                        print(f'Found valid caption for lang_code: {lang_code}')
-                    with open(caption_path, 'w') as f:
-                        f.write(caption.xml_captions)
-                elif verbose > 0:
-                    print(f'Warning, a caption for lang_code {lang_code} not found')
-            except AttributeError:
-                print(f'Attribute error:(')
+            caption = yt.captions.get_by_language_code(lang_code)
+            if caption is not None:
+                if verbose > 0:
+                    print(f'[INFO] Found valid caption for lang_code: {lang_code}')
+                with open(caption_path, 'w') as f:
+                    f.write(caption.xml_captions)
+            elif verbose > 0:
+                print(f'[WARNING] Warning, a caption for lang_code {lang_code} not found')
 
-    download_audio(url, datatype, output_path, filename, verbose)
-    try:
-        download_caption(url, caption_path, lang_code, verbose)
-    except (KeyError, URLError):
-        pass
-    return audio_path, caption_path
+    @retry(KeyError, tries=7, delay=1, backoff=2)
+    def get_yt_handler(url):
+        return YouTube(url)
+
+    if ignore_already_done or not exists(audio_path):  # (download caption is not mandatory)
+        yt = get_yt_handler(url)
+        download_audio(yt, datatype, audio_path, verbose)
+        try:
+            download_caption(yt, caption_path, lang_code, verbose)
+        except AttributeError as e:
+            print(f'[ERROR] Attribute error:( {e} - Will abandon downloading captions')
 
 
 def time_string_to_sec(str):
@@ -161,58 +197,96 @@ def time_string_to_sec(str):
     return sec_time
 
 
-def map_time_string(str, rec_time):
-    if str is 'begin':
-        return 0.0
-    elif str is 'end':
-        return rec_time
+def map_time_string(str_time, rec_time, intro, outro):
+    begin = intro
+    end = rec_time - outro
+    if str_time is 'begin':
+        return begin
+    elif str_time is 'end':
+        return end
     else:
-        sec_time = time_string_to_sec(str)
-        assert(0 <= sec_time <= rec_time)
+        sec_time = time_string_to_sec(str_time)
+        assert begin <= sec_time, f'{sec_time} should be larger than {begin}'
+        assert sec_time <= end, f'{sec_time} should be smaller than {end}'
         return sec_time
 
 
-def parse_segment(segment, rec_time):
+def parse_segment(segment, rec_time, intro, outro):
     assert 'start' in segment
     assert 'stop' in segment
     assert len(segment) is 2
     # pydub does things in milliseconds
-    mapped_segment = {k: 1000 * map_time_string(v, rec_time) for k, v in segment.items()}
+    mapped_segment = {k: 1000 * map_time_string(v, rec_time, intro, outro)
+                      for k, v in segment.items()}
     return mapped_segment
 
 
-def prepare_wav_input(audio_path, datatype, segments, verbose, use_original_frequency=False):
-    if use_original_frequency:
-        wav_path = f'{audio_path[:-4]}_orig_freq.wav'
+def resolve_audio_path(url_or_local, datatype, output_path_pattern):
+    output_path = dirname(output_path_pattern)
+    if url_or_local.startswith('http'):
+        filename = basename(f'{output_path_pattern[:-5]}_audio')
+        audio_path = join(output_path, f'{filename}.{datatype}')
+    elif url_or_local.endswith(datatype):
+        audio_path = join(output_path, url_or_local)
     else:
-        wav_path = f'{audio_path[:-3]}wav'
+        raise ValueError(f'unhandled url_or_local: {url_or_local}')
+    return audio_path
 
-    segments_path = f'{wav_path[:-4]}_segments.wav'
 
-    @check_if_already_done(wav_path, verbose)
-    def convert_to_16k_freq_mono_wav(audio_path, wav_path, datatype):
-        convert_to_16k_mono_wav(input=audio_path, output=wav_path,
-                                input_format=datatype)
-
-    @check_if_already_done(wav_path, verbose)
-    def convert_to_original_freq_mono_wav(audio_path, wav_path, datatype):
-        convert_to_mono_wav_original_frame_rate(input=audio_path, output=wav_path,
-                                                input_format=datatype)
-
-    @check_if_already_done(segments_path, verbose)
-    def filter_segments(wav_path, segments_path, segments):
-        recording = AudioSegment.from_wav(wav_path)
-        recording_time = recording.duration_seconds
-        parsed_segments = [parse_segment(segment, recording_time)
-                           for segment in segments]
-        empty = AudioSegment.empty()
-        filtered_rec = reduce(lambda x, y: x + recording[y['start']:y['stop']],
-                              parsed_segments, empty)
-        filtered_rec.export(segments_path, format='wav')
-
+def audio_and_segment_paths(in_audio_path, use_original_frequency, audio_format='wav'):
+    dot_in_extension_len = len(in_audio_path.split('.')[-1]) + 1
     if use_original_frequency:
-        convert_to_original_freq_mono_wav(audio_path, wav_path, datatype)
+        audio_path = f'{in_audio_path[:-dot_in_extension_len]}_orig_freq.{audio_format}'
     else:
-        convert_to_16k_freq_mono_wav(audio_path, wav_path, datatype)
-    filter_segments(wav_path, segments_path, segments)
-    return wav_path, segments_path
+        audio_path = f'{in_audio_path[:-dot_in_extension_len]}_16khz.{audio_format}'
+    dot_extension_len = len(audio_path.split('.')[-1]) + 1
+    segments_path = f'{audio_path[:-dot_extension_len]}_segments.{audio_format}'
+    return audio_path, segments_path
+
+
+def prepare_wav_input(audio_path, datatype, segments, intro_duration,
+                      outro_duration, verbose, need_full_length=False):
+
+    def convert_to_wav(audio_path, datatype, segments, original_freq, need_full_length):
+        wav_path, segments_path = audio_and_segment_paths(audio_path,
+                                                          original_freq)
+        convert_check_path = wav_path
+        if not need_full_length:
+            convert_check_path = segments_path
+
+        @check_if_already_done(segments_path, verbose)
+        def filter_segments(audio_path, segments_path, segments):
+            recording = None
+            audio_format = audio_path.split('.')[-1]
+            if audio_format == 'wav':
+                recording = AudioSegment.from_wav(audio_path)
+            else:
+                recording = AudioSegment.from_file(audio_path)
+
+            recording_time = recording.duration_seconds
+            parsed_segments = [parse_segment(segment, recording_time,
+                                             intro_duration, outro_duration)
+                               for segment in segments]
+            empty = AudioSegment.empty()
+            filtered_rec = reduce(lambda x, y: x + recording[y['start']:y['stop']],
+                                  parsed_segments, empty)
+            filtered_rec.export(segments_path, format='wav')
+
+        @check_if_already_done(convert_check_path, verbose)
+        def convert(audio_path, wav_path, segments_path, segments, original_freq):
+            if original_freq:
+                convert_to_mono_wav_original_frame_rate(input=audio_path,
+                                                        output=wav_path,
+                                                        input_format=datatype)
+            else:
+                convert_to_16k_mono_wav(input=audio_path, output=wav_path,
+                                        input_format=datatype)
+            filter_segments(wav_path, segments_path, segments)
+        convert(audio_path, wav_path, segments_path, segments, original_freq)
+        if not need_full_length and exists(wav_path):
+            os.remove(wav_path)
+
+    for original_freq in (True, False):
+        convert_to_wav(audio_path, datatype, segments, original_freq, need_full_length)
+
+

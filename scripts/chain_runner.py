@@ -4,14 +4,15 @@ from os.path import join
 from pathlib import Path
 from shutil import copy
 
-from marshmallow import ValidationError
-
 from chain import Chain
 import chains as this_line_is_necessary_to_register_chains
 from schemas import ChainRunnerSettingsSchema
 
 # TODO(marcin): replace "verbose" with https://realpython.com/python-logging/
 
+# TODO(marcin): add a chain that translate the sound to words and selects segments of given words ONLY
+# TODO(marcin): implement visualization of Paths (connected points representing tsne on the pointclouds
+#  within given timeframe (for instance dense pointclouds from each minute of the same sample)
 
 class ChainRunner(object):
 
@@ -30,10 +31,11 @@ class ChainRunner(object):
 
     def __init__(self, dataset_home_dir='../subjects/',
                  process_settings='', results_identifier='',
-                 verbose=1):
+                 subjects_pattern=None, verbose=1):
         self._dataset_home_dir = dataset_home_dir
         self._process_settings = process_settings
         self._results_identifier = results_identifier
+        self._subjects_pattern = subjects_pattern
         self._verbose = verbose
 
     @property
@@ -61,6 +63,15 @@ class ChainRunner(object):
         return self._results_identifier
 
     @property
+    def subjects_pattern(self):
+        """
+        read-only property that can be used for filtering subjects.
+        Inactive by default (set to None)
+        :return:
+        """
+        return self._subjects_pattern
+
+    @property
     def verbose(self):
         """
         read-only property that controls verbosity
@@ -80,7 +91,8 @@ class ChainRunner(object):
             if self.verbose > 0:
                 print(f'running chain {chain.__name__}')
             chain.initialize_from_parameters(self.dataset_home_dir, self.process_settings,
-                                             self.results_identifier, self.verbose).process()
+                                             self.results_identifier, self.subjects_pattern,
+                                             self.verbose).process()
         except AttributeError as e:
             if self.verbose > 0:
                 print(f'[ERROR] chain_name {chain_name} not found. {e}')
@@ -125,7 +137,8 @@ class ChainRunner(object):
         :return: None
         """
         try:
-            chains = self.filter_chains(Chain.ordered_subclasses, filter_set, filter_function)
+            chains = self.filter_chains(Chain.ordered_subclasses, filter_set,
+                                        filter_function)
             for chain in chains:
                 self.process_chain(chain.__name__)
         except ValueError as e:

@@ -12,7 +12,7 @@ easygui = '*'
 fire = '*'
 marshmallow = "==3.0.0rc5"
 matplotlib = '*'
-MulticoreTSNE = {editable = true,path = "./thirdparty/Multicore-TSNE"}
+MulticoreTSNE = {path = "./thirdparty/Multicore-TSNE"}
 natsort = '==6.0.0'
 networkx = '*'
 numpy = '*'

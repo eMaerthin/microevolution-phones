@@ -11,10 +11,12 @@ class WavProcessor(object):
 
   def __init__(self, path):
     self.path = path
+    self.rate = None
+    self.data = None
     self.read_path()
 
   def read_path(self):
-    rate,data = read_wav(self.path)
+    rate, data = read_wav(self.path)
     self.rate = rate
     self.data = data
 
@@ -36,8 +38,9 @@ class WavProcessor(object):
                               save_path=None, wait_ms=0):
     if annotation_file is None:
       annotation_file = self.path+"_out_log.txt"
+    audio_output_format = 'wav'
     if save_path is None:
-      save_path = self.path+"_test.wav"
+      save_path = self.path+f"_test.{audio_output_format}"
     annotations = Annotations(annotation_file)
     view_df = annotations.view_specific_character(character)
     starts,stops = map(lambda x: view_df[x].values.tolist(), ['Start', 'Stop'])

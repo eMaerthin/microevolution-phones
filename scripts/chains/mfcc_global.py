@@ -19,13 +19,15 @@ class MfccGlobal(Formants):
     which is valid also in this context
     """
 
-    @staticmethod
-    def sample_result_filename(sample):
-        return f'{sample[:-5]}_mfcc_global_result.json'
+    allow_sample_layer_concurrency = True
 
     @staticmethod
-    def filenames_to_skip_sample(sample):
-        return [f'{sample[:-5]}_mfcc_global_result.csv']
+    def sample_result_filename(out_sample_path):
+        return f'{out_sample_path[:-5]}_mfcc_global_result.json'
+
+    @staticmethod
+    def filenames_to_skip_sample(out_sample_path):
+        return [f'{out_sample_path[:-5]}_mfcc_global_result.csv']
 
     def _compute_global_mfcc(self, segments_path, mfcc_global_result_path):
         mfcc_nfft = self.process_settings.get("mfcc_nfft", 2048)

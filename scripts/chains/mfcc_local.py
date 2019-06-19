@@ -7,7 +7,6 @@ from decorators import check_if_already_done
 from format_converters import get_segment
 from schemas import *
 from chains.formants import Formants
-from chains.phoneme import Phoneme
 
 
 class MfccLocal(Formants):
@@ -19,13 +18,16 @@ class MfccLocal(Formants):
     It subclasses Formants to not repeat the sample_layer logic
     which is valid also in this context
     """
-    @staticmethod
-    def sample_result_filename(sample):
-        return f'{sample[:-5]}_mfcc_result.json'
+
+    allow_sample_layer_concurrency = True
 
     @staticmethod
-    def filenames_to_skip_sample(sample):
-        return [f'{sample[:-5]}_mfcc_result.csv']
+    def sample_result_filename(out_sample_path):
+        return f'{out_sample_path[:-5]}_mfcc_result.json'
+
+    @staticmethod
+    def filenames_to_skip_sample(out_sample_path):
+        return [f'{out_sample_path[:-5]}_mfcc_result.csv']
 
     def _compute_mfcc(self, segments_path, phonemes_result_path, mfcc_result_path):
         phoneme_len = self.process_settings.get("phoneme_len", 2048)
@@ -35,11 +37,11 @@ class MfccLocal(Formants):
         def store_mfcc(segments_path, phonemes_result_path, mfcc_result_path):
             wav = get_segment(segments_path, 'wav')
             frequency = wav.frame_rate
-            schema = PhonemesSchema()
+            schema = DecoderOutputSchema()
             with open(phonemes_result_path, 'r') as f:
                 json_file = json.load(f)
                 phonemes_result = schema.load(json_file)
-                phonemes_info = [info for info in phonemes_result['info']
+                phonemes_info = [info for info in phonemes_result['segment_info']
                                  if info['word'] not in self.blacklisted_phonemes]
                 mfcc_result = []
                 for info in phonemes_info:
@@ -53,7 +55,7 @@ class MfccLocal(Formants):
                         ith_mfcc_result_row = {'i': i, 'length': len(mfcc_features),
                                                'mfcc': ith_mfcc, **info}
                         mfcc_result.append(ith_mfcc_result_row)
-                mfcc_schema = MfccSchema()
+                mfcc_schema = MfccLocalSchema()
                 mfcc_dict = {'mfcc_info': mfcc_result}
                 result = mfcc_schema.dumps(mfcc_dict)
                 with open(mfcc_result_path, 'w') as result_f:

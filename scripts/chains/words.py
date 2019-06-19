@@ -13,28 +13,40 @@ from chains.preprocess import Preprocess
 MODEL_DIR = "../thirdparty/pocketsphinx/model"
 
 
-class Phoneme(Chain):
+class Words(Chain):
+    """
+    Chain to compute words and summarizes words occurences at levels of individual subject and dataset
+    """
     allow_sample_layer_concurrency = True
     requirements = [Preprocess]
 
     def __init__(self):
+        super(Words, self).__init__()
+        self._subject_words = {}
         self.decoder = None
+
+    def dataset_preprocess(self, dataset):
+        self._subject_words.clear()
+
+    def subject_preprocess(self, subject, samples,
+                           common_subject_settings):
+        self._subject_words[subject] = []
 
     @staticmethod
     def sample_result_filename(out_sample_path):
-        return f'{out_sample_path[:-5]}_phoneme_result.json'
+        return f'{out_sample_path[:-5]}_words_result.json'
 
-    def _compute_phonemes(self, segments_path, phonemes_result_path):
+    def _compute_words(self, segments_path, words_result_path):
         """
 
         :param segments_path:
-        :param phonemes_result_path:
+        :param words_result_path:
         :return:
         """
         model_dir = self.process_settings.get('model_dir', MODEL_DIR)
         decoder_hmm = self.process_settings.get('decoder_hmm', 'en-us/en-us')
-        decoder_allphone = self.process_settings.get('decoder_allphone',
-                                                     'en-us/en-us-phone.lm.bin')
+        decoder_lm = self.process_settings.get('decoder_lm',
+                                               'en-us/en-us.lm.bin')
         decoder_dict = self.process_settings.get('decoder_dict',
                                                  'en-us/cmudict-en-us.dict')
         decoder_lw = self.process_settings.get('decoder_lw', 2.0)
@@ -61,13 +73,13 @@ class Phoneme(Chain):
             hyp_result = hypothesis.dump(hyp_dict)
             return hyp_result, segment
 
-        @check_if_already_done(phonemes_result_path, self.verbose)
-        def recognize_phonemes(segments_path, phonemes_result_path):
+        @check_if_already_done(words_result_path, self.verbose)
+        def recognize_words(segments_path, words_result_path):
 
             # Create a decoder with certain model
             config = Decoder.default_config()
             config.set_string('-hmm', join(model_dir, decoder_hmm))
-            config.set_string('-allphone', join(model_dir, decoder_allphone))
+            config.set_string('-lm', join(model_dir, decoder_lm))
             config.set_string('-dict', join(model_dir, decoder_dict))
             config.set_float('-lw', decoder_lw)
             config.set_float('-pip', decoder_pip)
@@ -89,29 +101,26 @@ class Phoneme(Chain):
                             if not in_speech_buffer:
                                 hyp_result, segment = _get_decoder_results()
                                 segs += segment
-
                                 hyps.append(hyp_result)
                                 self.decoder.start_utt()
                     else:
                         if in_speech_buffer:
                             hyp_result, segment = _get_decoder_results()
                             segs += segment
-
                             hyps.append(hyp_result)
                         break
-            phonemes_dict = dict(hypotheses=hyps, segment_info=segs)
-            phonemes_result = DecoderOutputSchema().dumps(phonemes_dict)
-            with open(phonemes_result_path, 'w') as f:
-                f.write(phonemes_result)
+            words_dict = dict(hypotheses=hyps, segment_info=segs)
+            words_result = DecoderOutputSchema().dumps(words_dict)
+            with open(words_result_path, 'w') as f:
+                f.write(words_result)
 
-        recognize_phonemes(segments_path, phonemes_result_path)
+        recognize_words(segments_path, words_result_path)
 
         if self.verbose > 1:
-            schema = DecoderOutputSchema()
-            with open(phonemes_result_path, 'r') as f:
-                print(f'[DETAILS] phonemes_result_path: {phonemes_result_path}')
+            with open(words_result_path, 'r') as f:
+                print(f'[DETAILS] words_result_path: {words_result_path}')
                 json_file = json.load(f)
-                result = schema.load(json_file)
+                result = DecoderOutputSchema().load(json_file)
                 pprint(result, indent=pprint_indent)
 
     def sample_layer(self, subject, sample_json_filename, sample_settings):
@@ -119,9 +128,10 @@ class Phoneme(Chain):
         datatype = sample_settings.get('datatype')
 
         output_path_pattern = join(self.results_dir, subject, sample_json_filename)
-        phonemes_result_file = self.sample_result_filename(output_path_pattern)
+        words_result_file = self.sample_result_filename(output_path_pattern)
         if self.verbose > 0:
-            print(f'[INFO] phonemes result file: {phonemes_result_file}')
+            print(f'[INFO] words result file: {words_result_file}')
         audio_path = resolve_audio_path(url, datatype, output_path_pattern)
-        _, segments_path = audio_and_segment_paths(audio_path, use_original_frequency=False, audio_format='wav')
-        self._compute_phonemes(segments_path, phonemes_result_file)
+        _, segments_path = audio_and_segment_paths(audio_path, False)
+        self._compute_words(segments_path, words_result_file)
+

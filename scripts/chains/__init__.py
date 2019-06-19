@@ -1,10 +1,10 @@
-from . import (
-               # preprocess,  # this includes convert description from list.txt, populate csv db etc...
-               formants,
-               mfcc_local,
+from . import (formants,
                mfcc_global,
+               mfcc_local,
                phoneme,
-               # tsne_mfcc_local,
+               preprocess,  # this includes convert description from list.txt, populate csv db etc...
+               tsne_mfcc_local,
+               words,
                # tsne_mfcc_global,
                # spectrogram,
                # tsne_attempt2 # , tsne
