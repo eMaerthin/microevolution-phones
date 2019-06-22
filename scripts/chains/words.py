@@ -1,6 +1,6 @@
 import json
+import logging
 from os.path import join
-from marshmallow import pprint
 from pocketsphinx.pocketsphinx import Decoder
 
 from audio_processors import (audio_and_segment_paths, resolve_audio_path)
@@ -11,6 +11,7 @@ from chain import Chain
 from chains.preprocess import Preprocess
 
 MODEL_DIR = "../thirdparty/pocketsphinx/model"
+logger = logging.getLogger()
 
 
 class Words(Chain):
@@ -73,7 +74,7 @@ class Words(Chain):
             hyp_result = hypothesis.dump(hyp_dict)
             return hyp_result, segment
 
-        @check_if_already_done(words_result_path, self.verbose)
+        @check_if_already_done(words_result_path)
         def recognize_words(segments_path, words_result_path):
 
             # Create a decoder with certain model
@@ -116,12 +117,11 @@ class Words(Chain):
 
         recognize_words(segments_path, words_result_path)
 
-        if self.verbose > 1:
-            with open(words_result_path, 'r') as f:
-                print(f'[DETAILS] words_result_path: {words_result_path}')
-                json_file = json.load(f)
-                result = DecoderOutputSchema().load(json_file)
-                pprint(result, indent=pprint_indent)
+        with open(words_result_path, 'r') as f:
+            logger.debug(f'words_result_path: {words_result_path}')
+            json_file = json.load(f)
+            result = DecoderOutputSchema().load(json_file)
+            logger.debug(json.dumps(result, indent=pprint_indent))
 
     def sample_layer(self, subject, sample_json_filename, sample_settings):
         url = sample_settings.get('url')
@@ -129,8 +129,7 @@ class Words(Chain):
 
         output_path_pattern = join(self.results_dir, subject, sample_json_filename)
         words_result_file = self.sample_result_filename(output_path_pattern)
-        if self.verbose > 0:
-            print(f'[INFO] words result file: {words_result_file}')
+        logger.info(f'words result file: {words_result_file}')
         audio_path = resolve_audio_path(url, datatype, output_path_pattern)
         _, segments_path = audio_and_segment_paths(audio_path, False)
         self._compute_words(segments_path, words_result_file)

@@ -1,4 +1,4 @@
-import json
+import logging
 
 import numpy as np
 from python_speech_features import mfcc
@@ -7,6 +7,7 @@ from decorators import check_if_already_done
 from format_converters import get_segment
 from schemas import *
 from chains.formants import Formants
+logger = logging.getLogger()
 
 
 class MfccGlobal(Formants):
@@ -33,7 +34,7 @@ class MfccGlobal(Formants):
         mfcc_nfft = self.process_settings.get("mfcc_nfft", 2048)
         mfcc_winstep = self.process_settings.get("mfcc_winstep", 0.1)
 
-        @check_if_already_done(mfcc_global_result_path, self.verbose, lambda x: x)
+        @check_if_already_done(mfcc_global_result_path, lambda x: x)
         def store_global_mfcc(segments_path, mfcc_global_result_path):
             wav = get_segment(segments_path, 'wav')
             frequency = wav.frame_rate
@@ -57,5 +58,4 @@ class MfccGlobal(Formants):
     def compute_target(self, segments_path, _, output_path_pattern):
         mfcc_global_result_path = self.sample_result_filename(output_path_pattern)
         self._compute_global_mfcc(segments_path, mfcc_global_result_path)
-        if self.verbose > 0:
-            print(f'[INFO] mfcc_global result path: {mfcc_global_result_path}')
+        logger.info(f'mfcc_global result path: {mfcc_global_result_path}')

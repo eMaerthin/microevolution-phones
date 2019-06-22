@@ -1,6 +1,6 @@
 import json
+import logging
 from os.path import join
-from marshmallow import pprint
 from pocketsphinx.pocketsphinx import Decoder
 
 from audio_processors import (audio_and_segment_paths, resolve_audio_path)
@@ -11,6 +11,7 @@ from chain import Chain
 from chains.preprocess import Preprocess
 
 MODEL_DIR = "../thirdparty/pocketsphinx/model"
+logger = logging.getLogger()
 
 
 class Phoneme(Chain):
@@ -19,6 +20,7 @@ class Phoneme(Chain):
 
     def __init__(self):
         self.decoder = None
+        super().__init__()
 
     @staticmethod
     def sample_result_filename(out_sample_path):
@@ -61,7 +63,7 @@ class Phoneme(Chain):
             hyp_result = hypothesis.dump(hyp_dict)
             return hyp_result, segment
 
-        @check_if_already_done(phonemes_result_path, self.verbose)
+        @check_if_already_done(phonemes_result_path)
         def recognize_phonemes(segments_path, phonemes_result_path):
 
             # Create a decoder with certain model
@@ -106,13 +108,12 @@ class Phoneme(Chain):
 
         recognize_phonemes(segments_path, phonemes_result_path)
 
-        if self.verbose > 1:
-            schema = DecoderOutputSchema()
-            with open(phonemes_result_path, 'r') as f:
-                print(f'[DETAILS] phonemes_result_path: {phonemes_result_path}')
-                json_file = json.load(f)
-                result = schema.load(json_file)
-                pprint(result, indent=pprint_indent)
+        schema = DecoderOutputSchema()
+        with open(phonemes_result_path, 'r') as f:
+            logger.info(f'phonemes_result_path: {phonemes_result_path}')
+            json_file = json.load(f)
+            result = schema.load(json_file)
+            logger.debug(json.dumps(result, indent=pprint_indent))
 
     def sample_layer(self, subject, sample_json_filename, sample_settings):
         url = sample_settings.get('url')
@@ -120,8 +121,7 @@ class Phoneme(Chain):
 
         output_path_pattern = join(self.results_dir, subject, sample_json_filename)
         phonemes_result_file = self.sample_result_filename(output_path_pattern)
-        if self.verbose > 0:
-            print(f'[INFO] phonemes result file: {phonemes_result_file}')
+        logger.info(f'phonemes result file: {phonemes_result_file}')
         audio_path = resolve_audio_path(url, datatype, output_path_pattern)
         _, segments_path = audio_and_segment_paths(audio_path, use_original_frequency=False, audio_format='wav')
         self._compute_phonemes(segments_path, phonemes_result_file)

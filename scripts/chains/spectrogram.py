@@ -1,4 +1,5 @@
 import json
+import logging
 
 import numpy as np
 from scipy.signal import spectrogram
@@ -8,6 +9,7 @@ from format_converters import get_segment
 from schemas import *
 from chains.formants import Formants
 from chains.phoneme import Phoneme
+logger = logging.getLogger()
 
 
 class SpectrogramPipeline(Formants):
@@ -28,14 +30,13 @@ class SpectrogramPipeline(Formants):
 
     def compute_spectrograms(self, segments_path, phonemes_result_path, spectrogram_result_path,
                              phoneme_len=2048, ignore_shorter_phonemes=True):
-        @check_if_already_done(spectrogram_result_path, self.verbose, lambda x: x)
+        @check_if_already_done(spectrogram_result_path, lambda x: x)
         def store_spectrograms(segments_path, phonemes_result_path, spectrogram_result_path):
-            print(segments_path)
             wav = get_segment(segments_path, 'wav')
             frequency = wav.frame_rate
             schema = DecoderOutputSchema()
             with open(phonemes_result_path, 'r') as f:
-                print(f' phonemes_result_path: {phonemes_result_path}')
+                logger.info(f'phonemes_result_path: {phonemes_result_path}')
                 json_file = json.load(f)
                 phonemes_result = schema.load(json_file)
                 phonemes_info = [info for info in phonemes_result['segment_info']
@@ -68,5 +69,4 @@ class SpectrogramPipeline(Formants):
     def compute_target(self, segments_path, phonemes_path, series_json_path):
         spectrogram_result_path = self.result_filename(series_json_path)
         self.compute_spectrograms(segments_path, phonemes_path, spectrogram_result_path)
-        if self.verbose > 0:
-            print(f'spectrogram result path: {spectrogram_result_path}')
+        logger.info(f'spectrogram result path: {spectrogram_result_path}')

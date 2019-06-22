@@ -1,6 +1,8 @@
 from functools import wraps
+import logging
 from os.path import isfile
 import time
+logger = logging.getLogger()
 
 
 def timeit(func):
@@ -13,13 +15,13 @@ def timeit(func):
         ts = time.time()
         result = func(*args, **kw)
         te = time.time()
-        print(f'[INFO] Evaluation time of {func.__name__}: {te-ts} sec')
+        logger.info(f'Evaluation time of {func.__name__}: {te-ts} sec')
         return result
 
     return timed
 
 
-def check_if_already_done(check_path, verbose=0,
+def check_if_already_done(check_path,
                           ret_value_validator=None,
                           ignore_already_done=False):
     """
@@ -28,13 +30,21 @@ def check_if_already_done(check_path, verbose=0,
     nodes of the chain more than once.
     :param check_path: path to be checked if
     we already know the result of the method
-    :param verbose: verbosity level
     :param ret_value_validator: validates if
     function terminates properly - translates
     outcome of the function to either True or False.
     :param ignore_already_done: if set, will
     run the decorated method even if it was already
     done
+
+    TODO:
+    1. decorator does not need an extra parameter -
+    they can read the result_path from *args, also all check_if_already_done decorated methods
+    can be converted into members of a class that has automatically inserted check_if_already_
+    done + require result_path param
+    2. those decorated methods should have better implementation of the what-if-already-done
+    meaning that they should already return required value if any
+
     :return:
     """
     def done(path):
@@ -52,10 +62,9 @@ def check_if_already_done(check_path, verbose=0,
                 if task_done:
                     with open(done(check_path), 'w') as f:
                         f.write('OK')
-            elif verbose > 0:
-                print(f'[INFO] skipping evaluating this method'
-                      f' because {done(check_path)} already exists'
-                      ' - hence ignoring return value!')
+            logger.info(f'skipping evaluating this method'
+                        f' because {done(check_path)} already exists'
+                        ' - hence ignoring return value!')
             return value
 
         return wrapper

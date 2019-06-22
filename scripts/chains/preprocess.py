@@ -1,11 +1,11 @@
-from os.path import (basename, dirname, exists, join)
+import logging
+from os.path import (exists, join)
 from shutil import copy
-
 from audio_processors import (download_youtube_url,
                               prepare_wav_input,
                               resolve_audio_path)
-
 from chain import Chain
+logger = logging.getLogger()
 
 
 class Preprocess(Chain):
@@ -35,10 +35,10 @@ class Preprocess(Chain):
         if url.startswith('http'):
             download_youtube_url(url, datatype,
                                  output_path_pattern,
-                                 lang_code, self.verbose)
+                                 lang_code)
             audio_path = resolve_audio_path(url, datatype, output_path_pattern)
             prepare_wav_input(audio_path, datatype, segments, intro_duration,
-                              outro_duration, self.verbose, need_full_length)
+                              outro_duration, need_full_length)
 
         elif url.endswith(datatype):  # assuming that url is local filename
             input_audio_path = join(self.base_dir, subject, url)
@@ -47,10 +47,9 @@ class Preprocess(Chain):
             audio_path = resolve_audio_path(url, datatype, output_path_pattern)
             copy(input_audio_path, audio_path)
             prepare_wav_input(audio_path, datatype, segments, intro_duration,
-                              outro_duration, self.verbose, need_full_length)
+                              outro_duration, need_full_length)
         else:
             raise ValueError(f'unhandled url: {url} (settings: {sample_settings})')
 
         preprocess_result_file = self.sample_result_filename(output_path_pattern)
-        if self.verbose > 0:
-            print(f'[INFO] preprocess result file: {preprocess_result_file}')
+        logger.info(f'preprocess result file: {preprocess_result_file}')

@@ -1,6 +1,7 @@
 from abc import ABCMeta, abstractmethod
 from functools import reduce
 import json
+import logging
 from multiprocessing import cpu_count, Pool
 from os import (makedirs, walk)
 from os.path import (exists, isfile, join)
@@ -9,6 +10,7 @@ from natsort import natsorted
 from toposort import toposort_flatten
 
 from schemas import SampleSchema
+logger = logging.getLogger()
 
 
 def protect_abc(*protected):
@@ -45,13 +47,12 @@ class Chain(metaclass=protect_abc("load_settings", "merge_data_settings",
      - process_settings (this adjust how to process the chain)
      - results_identifier (stores name of the directory comprising experiment's results)
      - subjects_pattern (if set, store patterns used to filter subjects)
-     - verbose (sets verbosity)
 
      and a read-only property results_dir that holds absolute path of the experiment's results
 
 
     In addition there is one factory classmethod called initialize_from_parameters
-    that initializes Chain with base_dir, results_identifier and verbose.
+    that initializes Chain with base_dir and results_identifier.
 
     Subclass has to provide an implementation of following abstract methods:
     - sample_result_filename
@@ -86,7 +87,6 @@ class Chain(metaclass=protect_abc("load_settings", "merge_data_settings",
         self._base_dir = ''
         self._process_settings = {'raise_error_on_conflict_values': True}
         self._results_identifier = ''
-        self._verbose = 0
 
     @property
     def base_dir(self):
@@ -126,36 +126,16 @@ class Chain(metaclass=protect_abc("load_settings", "merge_data_settings",
     def results_identifier(self, new_value):
         self._results_identifier = str(new_value)
 
-    @property
-    def verbose(self):
-        """
-        Currently there are few supported verbosity levels:
-        0 - silent
-        1 - verbose
-        2 - extra verbose
-        :return: A verbosity level
-        """
-        return self._verbose
-
-    @verbose.setter
-    def verbose(self, new_value):
-        new_value = int(new_value)
-        if new_value < 0 or new_value > 2:
-            raise ValueError('expected number between 0 and 2')
-        self._verbose = new_value
-
     @classmethod
     def initialize_from_parameters(cls, base_dir, process_settings,
-                                   results_identifier, subjects_pattern,
-                                   verbose):
+                                   results_identifier, subjects_pattern):
         """
-        Initializes class with given verbose and base_dir values
+        Initializes class with given base_dir value
         :param base_dir: An absolute path to base directory
         :param process_settings: dictionary with settings
         :param results_identifier: name for intermediate folder
         comprising experiment' results
         :param subjects_pattern: if set, will be used to filter subjects
-        :param verbose: verbosity level
         :return:
         """
         pipeline = cls()
@@ -163,7 +143,6 @@ class Chain(metaclass=protect_abc("load_settings", "merge_data_settings",
         pipeline.process_settings = process_settings
         pipeline.results_identifier = results_identifier
         pipeline.subjects_pattern = subjects_pattern
-        pipeline.verbose = verbose
         return pipeline
 
     @staticmethod
@@ -300,13 +279,11 @@ class Chain(metaclass=protect_abc("load_settings", "merge_data_settings",
         settings_path = join(working_dir, settings_filename)
         try:
             with open(settings_path) as f:
-                if self.verbose > 0:
-                    print(f'[INFO] importing settings: {settings_path}')
+                logger.info(f'Importing settings: {settings_path}')
                 d = json.load(f)
                 return d
         except (EnvironmentError, json.decoder.JSONDecodeError) as e:
-            if self.verbose > 0:
-                print(f'[ERROR] {e} - defaulting to empty dict')
+            logger.error(f'{e} - defaulting to empty dict')
             return {}
 
     @abstractmethod
@@ -343,24 +320,22 @@ class Chain(metaclass=protect_abc("load_settings", "merge_data_settings",
 
         if any((isfile(filename_to_skip) for filename_to_skip
                 in skip_candidates[level](pattern))):
-            if self.verbose > 0:
-                print(f'[INFO] detected filenames_to_skip_{level} '
-                      f'for {pattern} - hence processing '
-                      f'the {level} is skipped')
-                found = [skipper for skipper in skip_candidates[level](pattern)
-                         if isfile(skipper)]
-                print(f'[INFO] found skippers: {found}')
+            logger.info(f'Detected filenames_to_skip_{level} '
+                        f'for {pattern} - hence processing '
+                        f'the {level} is skipped')
+            found = [skipper for skipper in skip_candidates[level](pattern)
+                     if isfile(skipper)]
+            logger.info(f'Found skippers: {found}')
             return True
 
         if any((not isfile(prerequisite(pattern)) for prerequisite
                 in prerequisites[level]())):
-            if self.verbose > 0:
-                print(f'[WARNING] some prerequisites are not found '
-                      f'for the {pattern} - hence '
-                      f'processing the {level} is skipped')
-                not_found = [p(pattern) for p in prerequisites[level]()
-                             if not isfile(p(pattern))]
-                print(f'[WARNING] not found prerequisites: {not_found}')
+            logger.warning(f'Some prerequisites are not found '
+                           f'for the {pattern} - hence '
+                           f'processing the {level} is skipped')
+            not_found = [p(pattern) for p in prerequisites[level]()
+                         if not isfile(p(pattern))]
+            logger.warning(f'Not found prerequisites: {not_found}')
             return True
 
         return False
@@ -439,8 +414,7 @@ class Chain(metaclass=protect_abc("load_settings", "merge_data_settings",
                     input_dir = join(self.base_dir, subject)
                     subject_settings = self.load_settings(input_dir, 'common.json')
                     self.subject_layer(subject, samples, subject_settings)
-                elif self.verbose > 0:
-                    print(f'[INFO] subject {subject} discarded due to subjects_pattern {self.subjects_pattern}')
+                logger.info(f'Subject {subject} discarded due to subjects_pattern {self.subjects_pattern}')
         self.dataset_postprocess(dataset)
 
     def process(self):
@@ -472,8 +446,7 @@ class Chain(metaclass=protect_abc("load_settings", "merge_data_settings",
                 if 'limit_recordings_per_subject' in self._process_settings:
                     samples = samples[:self._process_settings['limit_recordings_per_subject']]
                 subject_samples = (subject, samples)
-                if self.verbose > 1:
-                    print(f'[DETAILS] Added subject-samples pair: {subject_samples}')
+                logger.debug(f'Added subject-samples pair: {subject_samples}')
                 dataset.append(subject_samples)
 
         if self.sample_result_filename('').endswith('.json'):

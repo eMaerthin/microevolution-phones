@@ -1,4 +1,5 @@
 import json
+import logging
 from os import makedirs
 from os.path import join
 from pathlib import Path
@@ -6,13 +7,13 @@ from shutil import copy
 
 from chain import Chain
 import chains as this_line_is_necessary_to_register_chains
+from logging_manip import change_file_logger_path
 from schemas import ChainRunnerSettingsSchema
-
-# TODO(marcin): replace "verbose" with https://realpython.com/python-logging/
-
+logger = logging.getLogger()
 # TODO(marcin): add a chain that translate the sound to words and selects segments of given words ONLY
 # TODO(marcin): implement visualization of Paths (connected points representing tsne on the pointclouds
 #  within given timeframe (for instance dense pointclouds from each minute of the same sample)
+
 
 class ChainRunner(object):
 
@@ -27,16 +28,16 @@ class ChainRunner(object):
             makedirs(result_dir, exist_ok=True)
             copy(experiment_config_path,
                  join(result_dir, Path(experiment_config_path).name))
+            change_file_logger_path(result_dir)
             return cls(**result)
 
     def __init__(self, dataset_home_dir='../subjects/',
                  process_settings='', results_identifier='',
-                 subjects_pattern=None, verbose=1):
+                 subjects_pattern=None):
         self._dataset_home_dir = dataset_home_dir
         self._process_settings = process_settings
         self._results_identifier = results_identifier
         self._subjects_pattern = subjects_pattern
-        self._verbose = verbose
 
     @property
     def dataset_home_dir(self):
@@ -71,14 +72,6 @@ class ChainRunner(object):
         """
         return self._subjects_pattern
 
-    @property
-    def verbose(self):
-        """
-        read-only property that controls verbosity
-        :return:
-        """
-        return self._verbose
-
     def process_chain(self, chain_name='Phoneme'):
         """
         One of two possible way of processing the data.
@@ -88,14 +81,11 @@ class ChainRunner(object):
         """
         chain = Chain.subclasses.get(chain_name, None)
         try:
-            if self.verbose > 0:
-                print(f'running chain {chain.__name__}')
+            logger.info(f'running chain {chain.__name__}')
             chain.initialize_from_parameters(self.dataset_home_dir, self.process_settings,
-                                             self.results_identifier, self.subjects_pattern,
-                                             self.verbose).process()
+                                             self.results_identifier, self.subjects_pattern).process()
         except AttributeError as e:
-            if self.verbose > 0:
-                print(f'[ERROR] chain_name {chain_name} not found. {e}')
+            logger.error(f'Chain name {chain_name} not found. {e}')
 
     @staticmethod
     def filter_chains(chains, filter_set, filter_function):
@@ -142,8 +132,7 @@ class ChainRunner(object):
             for chain in chains:
                 self.process_chain(chain.__name__)
         except ValueError as e:
-            if self.verbose > 0:
-                print(f'[ERROR] {e}')
+            logger.error(f'Value error: {e}')
 
     def process_mfcc_chains(self):
         self.process_chains({'Mfcc'})

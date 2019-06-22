@@ -1,9 +1,9 @@
 from collections import OrderedDict
 import json
+import logging
 from os.path import join
 from pickle import (dumps, loads)
 
-from marshmallow import pprint
 import numpy as np
 import pandas as pd
 
@@ -12,7 +12,7 @@ from chains.mfcc_local import MfccLocal
 from decorators import (check_if_already_done, timeit)
 from dimensionality_reduction import (draw_events, draw_metrics, animate_language_change, fit_tsne, fit_pca, preprocess_events)
 from schemas import *
-
+logger = logging.getLogger()
 
 
 class TsneMfccLocal(Chain):
@@ -44,14 +44,13 @@ class TsneMfccLocal(Chain):
         mfcc_csv_result_path = self.sample_result_filename(output_path_pattern)
 
         @timeit
-        @check_if_already_done(mfcc_csv_result_path, self.verbose, lambda v: v)  # , ignore_already_done=True)
+        @check_if_already_done(mfcc_csv_result_path, lambda v: v)  # , ignore_already_done=True)
         def store_mfcc_result_as_csv(mfcc_result_path, mfcc_csv_result_path):
             schema = MfccLocalSchema()
             with open(mfcc_result_path, 'r') as f_csv:
                 json_file = json.load(f_csv)
                 result = schema.load(json_file)
-                if self.verbose > 1:
-                    pprint(result, indent=pprint_indent)
+                logger.debug(json.dumps(result, indent=pprint_indent))
                 df = pd.DataFrame.from_dict(result['mfcc_info'])
                 series_to_merge = df.mfcc.apply(pd.Series).add_suffix('_mfcc_features')
                 df = series_to_merge.merge(df, left_index=True,
@@ -88,8 +87,8 @@ class TsneMfccLocal(Chain):
         perplexity = self.process_settings.get('tsne_perplexity', 40)
         pca_components = self.process_settings.get('pca_components', 10)
         method = self.process_settings.get('visualization_method', 'pca_tsne')
-        filter = list(self.process_settings.get('visualization_phoneme_filter', ''))
-        filter_local = list(self.process_settings.get('visualization_phoneme_filter_local', ''))
+        filter = list(self.process_settings.get('tsne_phoneme_filter', self.process_settings.get('visualization_phoneme_filter', '')))
+        filter_local = list(self.process_settings.get('draw_phoneme_filter', self.process_settings.get('visualization_phoneme_filter_local', '')))
         out_shape = self.process_settings.get('visualization_out_shape', (1, 1))
         drawing_subsamples = self.process_settings.get('visualization_drawing_subsamples', False)
         agg_lists = self.process_settings.get('visualization_agg_lists', None)
@@ -106,7 +105,7 @@ class TsneMfccLocal(Chain):
         want_to_draw_events = True
 
         @timeit
-        @check_if_already_done(global_tsne_input_path, self.verbose)
+        @check_if_already_done(global_tsne_input_path)
         def prepare_global_tsne_input(out_path):
             with open(out_path, 'wb') as result_f:
                 pickled = dumps(self._events)
@@ -123,24 +122,27 @@ class TsneMfccLocal(Chain):
 
         filter_hash = '_'.join(sorted(filter))
 
-        def cache_fit_tsne(tsne_mfcc_result_path, x):
-            x_tsne = fit_tsne(x, n_iter=n_iter, perplexity=perplexity, verbose=self.verbose)
+        def cache_fit_tsne(tsne_mfcc_result_path, events):
+            x = np.array([event.x for event in events])
+            x_tsne = fit_tsne(x, n_iter=n_iter, perplexity=perplexity)
             # , n_iter=3000) #, n_iter=10000, n_iter_without_progress=100, perplexity=200)
             tsne_events = [event._replace(x=tsne) for tsne, event in zip(x_tsne, self._events)]
             pickle_dumped = dumps(tsne_events)
             with open(tsne_mfcc_result_path, 'wb') as f:
                 f.write(pickle_dumped)
 
-        def cache_pca(pca_mfcc_result_path, x):
-            pca = fit_pca(x, verbose=self.verbose, n_components=2)
+        def cache_pca(pca_mfcc_result_path, events):
+            x = np.array([event.x for event in events])
+            pca = fit_pca(x, n_components=2)
             x_pca = pca.transform(x)
             pca_events = [event._replace(x=x_new) for x_new, event in zip(x_pca, self._events)]
             pickle_dumped = dumps(pca_events)
             with open(pca_mfcc_result_path, 'wb') as f:
                 f.write(pickle_dumped)
 
-        def cache_pca_tsne(pca_tsne_mfcc_result_path, x):
-            pca = fit_pca([x], verbose=self.verbose, n_components=pca_components)
+        def cache_pca_tsne(pca_tsne_mfcc_result_path, events):
+            x = np.array([event.x for event in events])
+            pca = fit_pca([x], n_components=pca_components)
             x_pca = pca.transform(x)
             cache_fit_tsne(pca_tsne_mfcc_result_path, x_pca)
         pca_tsne_pickle_filename = f'pca_tsne_mfcc_result_{filter_hash}_{n_iter}_{perplexity}_{pca_components}.pickle'
@@ -153,15 +155,15 @@ class TsneMfccLocal(Chain):
                      'pca_tsne': cache_pca_tsne}
 
         validation = None
-        if self.verbose > 0:
-            print(f'[INFO] method: {method}')
+        logger.info(f'method: {method}')
         result_path = result_path_dict[method]
-        cache_fun = timeit(check_if_already_done(result_path, self.verbose)
+        cache_fun = timeit(check_if_already_done(result_path)
                            (cache_fun_dict[method]))
-        cache_fun(result_path, np.array([event.x for event in self._events]))
+        cache_fun(result_path, self._events)
 
         with open(result_path, 'rb') as f:
-            vis_events, converters = preprocess_events(loads(f.read()))
+            # converter of timestamps should be applied in a better place perhaps
+            vis_events, converters = preprocess_events(loads(f.read()), self.base_dir)
 
             # TODO(marcin) clean up is needed
             #  '''
@@ -189,19 +191,18 @@ class TsneMfccLocal(Chain):
 
                 metrics_result_path = draw_result_path[:-4] + '_metrics.png'
                 draw_metrics(metrics_result_path, events=vis_events, converters=converters, split_params=split_params,
-                             verbose=self.verbose, out_shape=out_shape, drawing_subsamples=drawing_subsamples,
+                             out_shape=out_shape, drawing_subsamples=drawing_subsamples,
                              sup_title=sup_title, validation=validation)
 
                 draw_events(draw_result_path, events=vis_events, converters=converters, split_params=split_params,
-                            verbose=self.verbose, out_shape=out_shape, drawing_subsamples=drawing_subsamples,
+                            out_shape=out_shape, drawing_subsamples=drawing_subsamples,
                             sup_title=sup_title, validation=validation)
 
 
             for (meshgrid_alpha, scatter_alpha) in [(0.0, 1.0), (1.0, 0.0)]:
                 prefix = join(working_dir, f'animated_{method}_mfcc_result_{filter_hash}_{filter_local_hash}')
                 suffix = f'.{out_video_format}'
-                params = OrderedDict({'verbose': self.verbose,
-                                      'reverted': reverted, 'fps': fps, 'save_pngs': False,
+                params = OrderedDict({'reverted': reverted, 'fps': fps, 'save_pngs': False,
                                       'scatter_alpha': scatter_alpha, 'meshgrid_alpha': meshgrid_alpha,
                                       'dpi': dpi
                                       })

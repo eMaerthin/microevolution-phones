@@ -1,6 +1,7 @@
 from collections import OrderedDict
 from functools import reduce
 from itertools import product
+import logging
 from operator import attrgetter
 from random import shuffle
 
@@ -18,29 +19,28 @@ from tqdm import tqdm
 
 from schemas import *
 
+logger = logging.getLogger()
 NORMALIZATION_FACTOR = 1.0  # 8.0  # 255.0
 
 
-def fit_tsne(x, n_components=2, perplexity=30, n_iter=1000, n_iter_without_progress=300, verbose=0):
+def fit_tsne(x, n_components=2, perplexity=30, n_iter=1000, n_iter_without_progress=300):
     assert (n_components is 2)
     tsne = TSNE(n_jobs=4, n_components=n_components, perplexity=perplexity,
-                n_iter=n_iter, n_iter_without_progress=n_iter_without_progress,
-                verbose=verbose)
+                n_iter=n_iter, n_iter_without_progress=n_iter_without_progress)
     tsne_out = tsne.fit_transform(x)
     return tsne_out
 
 
-def fit_pca(list_X, n_components=2, verbose=0):
+def fit_pca(list_X, n_components=2):
     pca = PCA(n_components=n_components)
     X = np.concatenate(list_X)
     pca.fit(X)
-    if verbose > 0:
-        print(f' pca explained variance ratio: {pca.explained_variance_ratio_}')
-        cum = [pca.explained_variance_ratio_[0]]
-        for i in range(1, len(pca.explained_variance_ratio_)):
-            cum.append(cum[i - 1] + pca.explained_variance_ratio_[i])
-        print(f' pca explained variance ratio cum: {cum}')
-        print(f' pca singular values: {pca.singular_values_}')
+    logger.info(f'PCA explained variance ratio: {pca.explained_variance_ratio_}')
+    cum = [pca.explained_variance_ratio_[0]]
+    for i in range(1, len(pca.explained_variance_ratio_)):
+        cum.append(cum[i - 1] + pca.explained_variance_ratio_[i])
+    logger.info(f'PCA explained variance ratio cum: {cum}')
+    logger.info(f'PCA singular values: {pca.singular_values_}')
     return pca
 
 
@@ -51,9 +51,8 @@ def parse_validation(validation=None):
     return validated
 
 
-def draw_composition(Xs, ys, result_path, verbose=0,
-                     out_shape=None, agg_shape=None, drawing_subsamples=False,
-                     sup_title=None, validation=None):
+def draw_composition(Xs, ys, result_path, out_shape=None, agg_shape=None,
+                     drawing_subsamples=False, sup_title=None, validation=None):
     if not out_shape:
         out_shape = (1, len(ys))
     if not agg_shape:
@@ -76,7 +75,6 @@ def draw_composition(Xs, ys, result_path, verbose=0,
     a1, a2 = agg_shape
     indices = [r[a1 * i:a1 * (i + 1), a2 * j: a2 * (j + 1)].reshape(-1) for i, j in product(range(out_shape[0]),
                                                                                             range(out_shape[1]))]
-    # print(indices)
     x_list = []
     y_list = []
     t_list = []
@@ -91,22 +89,20 @@ def draw_composition(Xs, ys, result_path, verbose=0,
     if drawing_subsamples:
         min_samples = np.inf
         for yi in y_list:
-            if verbose > 0:
-                print(f'checking minimum len(y). current: {len(yi)}, minimum so far: {min_samples}')
+            logger.debug(f'Checking minimum len(y). current: {len(yi)}, minimum so far: {min_samples}')
             min_samples = min(min_samples, len(yi))
 
     if sup_title:
         sup_title = sup_title + f' remaining pts: {min_samples}'
     colors = ["red", "green", "blue", "orange", "purple", "pink", "yellow"]
     metrics = []
-    print(x_list[0])
     min_x1, min_x2, max_x1, max_x2 = \
         reduce(lambda cum, cur: (min(cum[0], min(cur[0])),
                                  min(cum[1], min(cur[1])),
                                  max(cum[2], max(cur[0])),
                                  max(cum[3], max(cur[1]))),
                zip(*x_list), (np.inf, np.inf, -np.inf, -np.inf))
-    print(f'limits: {(min_x1, min_x2, max_x1, max_x2)}')
+    logger.debug(f'limits: {(min_x1, min_x2, max_x1, max_x2)}')
     vmax = None
     for ax, title, x, y in zip(axes1d, t_list, x_list, y_list):
         x1, x2 = zip(*x)
@@ -120,8 +116,7 @@ def draw_composition(Xs, ys, result_path, verbose=0,
             radius = max(np.std(p1),np.std(p2))
             circle = plt.Circle((cx, cy), radius, color='gray', zorder=1)
             ax.add_artist(circle)'''
-        if verbose > 0:
-            print(f'remaining labels: {remaining_labels} (#pts in total: {len(y)})')
+        logger.debug(f'remaining labels: {remaining_labels} (#pts in total: {len(y)})')
         # plt.subplot(len_x_vector, 1, i + 1, aspect='equal')
         # ax.title(title)
         color = [colors[remaining_labels.index(v_y) % len(colors)] for v_y in y]
@@ -132,8 +127,7 @@ def draw_composition(Xs, ys, result_path, verbose=0,
             color = color[:min_samples]
             x1 = x1[:min_samples]
             x2 = x2[:min_samples]
-            if verbose > 0:
-                print(f'remaining pts: {len(color)}')
+            logger.debug(f'remaining pts: {len(color)}')
         ax.scatter(x1, x2, c=color, s=1, zorder=2, alpha=0.0015)
         bins = [41, 41]  # [7, 7]  # [41, 41]
         disk_radius = 6  # 6  # 3  # 6
@@ -141,25 +135,21 @@ def draw_composition(Xs, ys, result_path, verbose=0,
                                              range=[[min_x1, max_x1], [min_x2, max_x2]]) #, bins=(xedges, yedges))
         h = h.astype(np.uint8)
         hist_img = windowed_histogram(h, disk(disk_radius))
-        #hist_img_max = np.argmax(hist_img, axis=2)
         hist_img_max = h.copy()
 
         for ix, iy in np.ndindex(hist_img_max.shape):
             hist_img_max[ix, iy] = np.sum([NORMALIZATION_FACTOR * i_elem * elem for i_elem, elem in enumerate(hist_img[ix][iy])])
-        # print(hist_img_max)
         h = hist_img_max.T #h.T
         if not vmax:
             vmax = np.max(h)
-        # print(h)
-        # print(f'{np.max(h)} vs {1/81/(x_edges[1]-x_edges[0])/(y_edges[1]-y_edges[0])}')
         m1, m2 = np.meshgrid(x_edges, y_edges)
-        print(f'shape: {m1.shape} vs {m2.shape} vs {h.shape}')
+        logger.debug(f'shape: {m1.shape} vs {m2.shape} vs {h.shape}')
         ax.pcolormesh(m1, m2, h, zorder=1, vmin=0.0, vmax=vmax, cmap='RdBu') #, shading='gouraud') #150) #0.0001) # cmap='RdBu',
         ax.set(aspect='equal')
         ax.set_title(title, fontsize=8)
         metrics.append(h.reshape(-1))
     distance_matrix = squareform(pdist(np.array(metrics))) / NORMALIZATION_FACTOR
-    print(distance_matrix)
+    logger.debug(f'Distance matrix: {distance_matrix}')
     if sup_title:
         # sup_title = sup_title + '\nDistances from the first picture: '+np.array2string(distance_matrix[0], precision=1)
         fig.suptitle(sup_title, fontsize=8)
@@ -172,7 +162,7 @@ def draw_composition(Xs, ys, result_path, verbose=0,
     mng.resize(*mng.window.maxsize())
     part2_x = [np.array(metrics)]
     part2_tsne = fit_tsne(part2_x)
-    print(f'tsne: {part2_tsne}')
+    logger.debug(f'tsne: {part2_tsne}')
     p2_x1, p2_x2 = zip(*part2_tsne[0])
     kf = out_shape[1] // agg_shape[0]
     color = ['red']*kf + ['green']*kf + ['blue']*kf
@@ -185,8 +175,7 @@ def draw_composition(Xs, ys, result_path, verbose=0,
     # plt.show()
 
 
-def draw_X(Xs, result_path, verbose=0,
-           out_shape=None, agg_shape=None, drawing_subsamples=False,
+def draw_X(Xs, result_path, out_shape=None, agg_shape=None, drawing_subsamples=False,
            sup_title=None, validation=None):
     if not out_shape:
         out_shape = (1, len(Xs))
@@ -209,21 +198,17 @@ def draw_X(Xs, result_path, verbose=0,
     a1, a2 = agg_shape
     indices = [r[a1 * i:a1 * (i + 1), a2 * j: a2 * (j + 1)].reshape(-1) for i, j in product(range(out_shape[0]),
                                                                                             range(out_shape[1]))]
-    # print(indices)
     x_list = []
     t_list = []
 
     for i in indices:
         x_list.append(sum((Xs[j] for j in i), []))
         title = f'S{1 + (i[0] // estimated_series_size)}_D{1 + (i[0] % estimated_series_size)}'
-        #if len(i) > 1:
-        #    title = title + f' - S{1 + (i[-1] // estimated_series_size) }_D{1 + (i[-1] % estimated_series_size)}'
         t_list.append(title)
     if drawing_subsamples:
         min_samples = np.inf
         for xi in x_list:
-            if verbose > 0:
-                print(f'checking minimum len(x). current: {len(xi)}, minimum so far: {min_samples}')
+            logger.debug(f'checking minimum len(x). current: {len(xi)}, minimum so far: {min_samples}')
             min_samples = min(min_samples, len(xi))
 
     if sup_title:
@@ -235,8 +220,7 @@ def draw_X(Xs, result_path, verbose=0,
                                  max(cum[2], max(cur[0])),
                                  max(cum[3], max(cur[1]))),
                zip(*x_list), (np.inf, np.inf, -np.inf, -np.inf))
-    if verbose > 0:
-        print(f'limits: {(min_x1, min_x2, max_x1, max_x2)}')
+    logger.debug(f'limits: {(min_x1, min_x2, max_x1, max_x2)}')
     vmax = None
     for ax, title, x in zip(axes1d, t_list, x_list):
         x1, x2 = zip(*x)
@@ -246,8 +230,7 @@ def draw_X(Xs, result_path, verbose=0,
             x1, x2 = zip(*together)
             x1 = x1[:min_samples]
             x2 = x2[:min_samples]
-            if verbose > 0:
-                print(f'remaining pts: {len(x1)}')
+            logger.debug(f'remaining pts: {len(x1)}')
         ax.scatter(x1, x2, c='red', s=1, zorder=2, alpha=0.0015)
         bins = [30, 30]  # [41, 41]  # [7, 7]  # [41, 41]
         disk_radius = 2  # 6  # 6  # 3  # 6
@@ -263,15 +246,13 @@ def draw_X(Xs, result_path, verbose=0,
         if not vmax:
             vmax = np.max(h)
         m1, m2 = np.meshgrid(x_edges, y_edges)
-        if verbose > 1:
-            print(f'shape: {m1.shape} vs {m2.shape} vs {h.shape}')
+        logger.debug(f'shape: {m1.shape} vs {m2.shape} vs {h.shape}')
         ax.pcolormesh(m1, m2, h, zorder=1, vmin=0.0, vmax=vmax, cmap='gray_r')  # cmap='RdBu') #, shading='gouraud') #150) #0.0001) # cmap='RdBu',
         ax.set(aspect='equal')
         ax.set_title(title, fontsize=8)
         metrics.append(h.reshape(-1))
     distance_matrix = squareform(pdist(np.array(metrics))) / NORMALIZATION_FACTOR
-    if verbose > 0:
-        print(distance_matrix)
+    logger.debug(f'distance matrix: {distance_matrix}')
     if sup_title:
         # sup_title = sup_title + '\nDistances from the first picture: '+np.array2string(distance_matrix[0], precision=1)
         fig.suptitle(sup_title, fontsize=8)
@@ -284,8 +265,7 @@ def draw_X(Xs, result_path, verbose=0,
     mng.resize(*mng.window.maxsize())
     part2_x = [np.array(metrics)]
     part2_tsne = fit_tsne(part2_x)
-    if verbose > 0:
-        print(f'tsne: {part2_tsne}')
+    logger.debug(f'tsne: {part2_tsne}')
     p2_x1, p2_x2 = zip(*part2_tsne[0])
     kf = out_shape[1] // agg_shape[0]
     colours = ['red', 'green', 'blue', 'black', 'magenta', 'yellow']
@@ -299,9 +279,8 @@ def draw_X(Xs, result_path, verbose=0,
     # plt.show()
 
 
-def draw_X2(Xs, result_path, verbose=0,
-           out_shape=None, agg_lists=None, drawing_subsamples=False,
-           sup_title=None, validation=None):
+def draw_X2(Xs, result_path, out_shape=None, agg_lists=None, drawing_subsamples=False,
+            sup_title=None, validation=None):
     def split_seq(seq, size):
         newseq = []
         split_size = 1.0 / size * len(seq)
@@ -328,7 +307,7 @@ def draw_X2(Xs, result_path, verbose=0,
 
     axes1d = axes.flatten()
     indices = agg_lists
-    print(indices)
+    logger.debug(f'Indices: {indices}')
     x_list = []
     t_list = []
 
@@ -339,23 +318,19 @@ def draw_X2(Xs, result_path, verbose=0,
     if drawing_subsamples:
         min_samples = np.inf
         for xi in x_list:
-            if verbose > 0:
-                print(f'checking minimum len(x). current: {len(xi)}, minimum so far: {min_samples}')
+            logger.debug(f'checking minimum len(x). current: {len(xi)}, minimum so far: {min_samples}')
             min_samples = min(min_samples, len(xi))
 
         if sup_title:
             sup_title = sup_title + f' remaining pts: {min_samples}'
     metrics = []
-    print(x_list[0])
-    # print((list(zip(*x_list))[0][1]))
     min_x1, min_x2, max_x1, max_x2 = \
         reduce(lambda cum, cur: (min(cum[0], min(cur[0])),
                                  min(cum[1], min(cur[1])),
                                  max(cum[2], max(cur[0])),
                                  max(cum[3], max(cur[1]))),
                zip(*x_list), (np.inf, np.inf, -np.inf, -np.inf))
-    if verbose > 0:
-        print(f'limits: {(min_x1, min_x2, max_x1, max_x2)}')
+    logger.debug(f'limits: {(min_x1, min_x2, max_x1, max_x2)}')
     # vmax = None
     for ax, title, x in zip(axes1d, t_list, x_list):
         x1, x2 = zip(*x)
@@ -365,8 +340,7 @@ def draw_X2(Xs, result_path, verbose=0,
             x1, x2 = zip(*together)
             x1 = x1[:min_samples]
             x2 = x2[:min_samples]
-            if verbose > 0:
-                print(f'remaining pts: {len(x1)}')
+            logger.debug(f'remaining pts: {len(x1)}')
         ax.scatter(x1, x2, c='red', s=1, zorder=2, alpha=0.0015)
         bins = [30, 30]  # [41, 41]  # [7, 7]  # [41, 41]
         disk_radius = 2  # 6  # 6  # 3  # 6
@@ -382,16 +356,14 @@ def draw_X2(Xs, result_path, verbose=0,
         # if not vmax:
         #    vmax = np.max(h)
         m1, m2 = np.meshgrid(x_edges, y_edges)
-        if verbose > 1:
-            print(f'shape: {m1.shape} vs {m2.shape} vs {h.shape}')
+        logger.debug(f'shape: {m1.shape} vs {m2.shape} vs {h.shape}')
         ax.pcolormesh(m1, m2, h, zorder=1, vmin=0.0,  # vmax=vmax,
                       cmap='gray_r')  # cmap='RdBu') #, shading='gouraud') #150) #0.0001) # cmap='RdBu',
         ax.set(aspect='equal')
         ax.set_title(title, fontsize=8)
         metrics.append(h.reshape(-1))
     distance_matrix = squareform(pdist(np.array(metrics))) / NORMALIZATION_FACTOR
-    if verbose > 0:
-        print(distance_matrix)
+    logger.debug(f'distance matrix: {distance_matrix}')
     if sup_title:
         # sup_title = sup_title + '\nDistances from the first picture: '+np.array2string(distance_matrix[0], precision=1)
         fig.suptitle(sup_title, fontsize=8)
@@ -404,8 +376,7 @@ def draw_X2(Xs, result_path, verbose=0,
     mng.resize(*mng.window.maxsize())
     part2_x = [np.array(metrics)]
     part2_tsne = fit_tsne(part2_x)
-    if verbose > 0:
-        print(f'tsne: {part2_tsne}')
+    logger.debug(f'tsne: {part2_tsne}')
     p2_x1, p2_x2 = zip(*part2_tsne[0])
     colours = ['red', 'green', 'blue', 'black', 'magenta', 'yellow', 'purple']
     color = [i for s in [[c] * out_shape[1] for c in colours[:out_shape[0]]] for i in s]
@@ -436,7 +407,7 @@ def draw_X2(Xs, result_path, verbose=0,
                 writer.grab_frame()
 
 
-def preprocess_events(events):
+def preprocess_events(events, base_dir):
     """
     preprocess_events populates list of Converters and scales timestamps to [0,1]
     :param events:
@@ -459,12 +430,10 @@ def preprocess_events(events):
                               color, color_labels)
         converters[subject] = converter
 
-    def update_timestamp(timestamp, subject):
-        c = converters[subject]
-        return (timestamp - c.timestamp_min) / c.time_scale
-
-    scaled_events = [event._replace(timestamp=update_timestamp(event.timestamp,
-                                               event.subject)) for event in events]
+    def update_timestamp(event):
+        c = converters[event.subject]
+        return (event.timestamp - c.timestamp_min) / c.time_scale
+    scaled_events = [event._replace(timestamp=update_timestamp(event)) for event in events]
     sorted_events = sorted(scaled_events, key=attrgetter('timestamp'))
     return sorted_events, converters
 
@@ -492,7 +461,6 @@ def split_events_by_lifespan(events, split_params):
         subject_events.sort(key=by_timestamp_raw)
         start_t = subject_events[0].timestamp_raw
         stop_t = subject_events[-1].timestamp_raw
-        print(f'start - stop: {start_t} - {stop_t}')
         t = start_t
         while t <= stop_t:
             current_events = [event for event in subject_events if t <= event.timestamp_raw < t + lifespan]
@@ -546,17 +514,9 @@ def split_events_by_fitting_to_shape(events, split_params):
     split_dict = OrderedDict(items)  # .fromkeys(range(out_shape[0] * out_shape[1]))  # [None] * out_shape[0] * out_shape[1]
 
     for i, subject in enumerate(subjects):
-        print(f'subject: {subject}')
         subject_events = [event for event in events if event.subject == subject]
 
-        print(f' subject, before split: {set([event.subject for event in subject_events])}')
-        print(f' subject, before split: {len([event for event in subject_events])}')
-
         current_splits, current_frame_ids = split_events(subject_events, strategy_params)
-
-        print(f' subject, after split: {set([event.subject for event_packet in current_splits for event in event_packet])}')
-        print(f' subject, after split: {len([event for event_packet in current_splits for event in event_packet])}')
-        # split_length = len(split_and_frame_ids)
         max_frame_id = current_frame_ids[-1]
         for current_split, current_frame_id in zip(current_splits, current_frame_ids):
             index = i * out_shape[1] + ( (current_frame_id * out_shape[1]) // (max_frame_id + 1) )
@@ -597,7 +557,7 @@ def compute_histogram(events, bins, selem):
 
 def animate_language_change(events, converters, animated_result_path, split_params, bins=(30, 30),
                             disk_radius=2, reverted=False, dpi=100, fps=60, save_pngs=False, metadata=None,
-                            scatter_alpha=0.0, meshgrid_alpha=1.0, separate_subject=None, verbose=None):
+                            scatter_alpha=0.0, meshgrid_alpha=1.0, separate_subject=None):
     writer = FFMpegWriter(fps=fps, metadata=metadata)
     assert save_pngs is False, 'currently we do not support saving pngs'
     fig = plt.figure()
@@ -649,23 +609,21 @@ def animate_language_change(events, converters, animated_result_path, split_para
 
 def draw_metrics(result_path, events, converters, split_params=None,
                 bins=(30, 30), disk_radius=2,
-                verbose=0, out_shape=None, drawing_subsamples=False,
+                out_shape=None, drawing_subsamples=False,
                 sup_title=None, validation=None):
 
     event_split, frame_ids = split_events(events, split_params)
     xs = np.array([event.x for event in events])
     min_x1, min_x2 = np.amin(xs, axis=0)
     max_x1, max_x2 = np.amax(xs, axis=0)
-    if verbose > 0:
-        print(f'[DEBUG] limits: {(min_x1, min_x2, max_x1, max_x2)}')
+    logger.debug(f'limits: {(min_x1, min_x2, max_x1, max_x2)}')
 
     x_edges = np.linspace(min_x1, max_x1, bins[0], endpoint=True)
     y_edges = np.linspace(min_x2, max_x2, bins[1], endpoint=True)
     min_samples = np.inf
     if drawing_subsamples:
         for event_packet in event_split:
-            if verbose > 0:
-                print(f'[DEBUG] checking minimum len(x). current: {len(event_packet)}, minimum so far: {min_samples}')
+            logger.debug(f'Checking minimum len(x). current: {len(event_packet)}, minimum so far: {min_samples}')
             min_samples = min(min_samples, len(event_packet))
 
     titles = []
@@ -689,12 +647,9 @@ def draw_metrics(result_path, events, converters, split_params=None,
     mng = plt.get_current_fig_manager()
     mng.resize(*mng.window.maxsize())
     part2_x = np.array(metrics)
-    print(len(part2_x))
-    print(part2_x.shape)
     part2_tsne = fit_tsne(part2_x)
 
-    if verbose > 0:
-        print(f'tsne: {part2_tsne}')
+    logger.debug(f'tsne: {part2_tsne}')
     p2_x1, p2_x2 = zip(*part2_tsne)
     colours = ['red', 'green', 'blue', 'black', 'magenta', 'yellow', 'purple']
     color = [i for s in [[c] * out_shape[1] for c in colours[:out_shape[0]]] for i in s]
@@ -708,25 +663,17 @@ def draw_metrics(result_path, events, converters, split_params=None,
 
 def draw_events(result_path, events, converters, split_params=None,
                 bins=(30, 30), disk_radius=2,
-                verbose=0, out_shape=None, drawing_subsamples=False,
+                out_shape=None, drawing_subsamples=False,
                 sup_title=None, validation=None):
 
     split_params = {'strategy': 'fit_to_shape',
                     'additional_params': split_params,
                     'out_shape': out_shape}
-    print(f' before split: {set([event.subject for event in events])}')
-    print(f' before split: {len([event for event in events])}')
-
     event_split, frame_ids = split_events(events, split_params)
-
-    print(f' after split: {set([event.subject for event_packet in event_split for event in event_packet ])}')
-    print(f' after split: {len([event for event_packet in event_split for event in event_packet])}')
-    print(frame_ids)
     xs = np.array([event.x for event in events])
     min_x1, min_x2 = np.amin(xs, axis=0)
     max_x1, max_x2 = np.amax(xs, axis=0)
-    if verbose > 0:
-        print(f'[DEBUG] limits: {(min_x1, min_x2, max_x1, max_x2)}')
+    logger.debug(f'limits: {(min_x1, min_x2, max_x1, max_x2)}')
 
     x_edges = np.linspace(min_x1, max_x1, bins[0], endpoint=True)
     y_edges = np.linspace(min_x2, max_x2, bins[1], endpoint=True)
@@ -735,8 +682,7 @@ def draw_events(result_path, events, converters, split_params=None,
     if drawing_subsamples:
         min_samples = np.inf
         for event_packet in event_split:
-            if verbose > 0:
-                print(f'[DEBUG] checking minimum len(x). current: {len(event_packet)}, minimum so far: {min_samples}')
+            logger.debug(f'checking minimum len(x). current: {len(event_packet)}, minimum so far: {min_samples}')
             min_samples = min(min_samples, len(event_packet))
 
         if sup_title:
@@ -791,13 +737,9 @@ def draw_events(result_path, events, converters, split_params=None,
     mng = plt.get_current_fig_manager()
     mng.resize(*mng.window.maxsize())
     part2_x = np.array(metrics)
-    print(len(part2_x))
-    print(part2_x.shape)
-    #exit(-1)
     part2_tsne = fit_tsne(part2_x, perplexity=1)
 
-    if verbose > 0:
-        print(f'tsne: {part2_tsne}')
+    logger.debug(f'tsne: {part2_tsne}')
     p2_x1, p2_x2 = zip(*part2_tsne)
     colours = ['red', 'green', 'blue', 'black', 'magenta', 'yellow', 'purple']
     color = [i for s in [[c] * out_shape[1] for c in colours[:out_shape[0]]] for i in s]
@@ -808,6 +750,3 @@ def draw_events(result_path, events, converters, split_params=None,
     result_path_dynamics = f'{result_path[:-4]}_dynamics.png'
     plt.savefig(result_path_dynamics, dpi='figure', frameon=True, bbox_inches=None)
     # animated_path_dynamics = f'{result_path[:-4]}_animated_dynamics.mp4'
-
-
-

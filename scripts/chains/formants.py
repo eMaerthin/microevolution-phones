@@ -1,4 +1,5 @@
 import json
+import logging
 from os.path import (dirname, join)
 
 import numpy as np
@@ -10,6 +11,7 @@ from format_converters import get_segment
 from schemas import *
 from chain import Chain
 from chains.phoneme import Phoneme
+logger = logging.getLogger()
 
 
 class Formants(Chain):
@@ -50,12 +52,11 @@ class Formants(Chain):
         spectrogram_window = self.process_settings.get('spectrogram_window',
                                                        ('kaiser', 4.0))
         spectrogram_n = self.process_settings.get('spectrogram_n', 5)
-        @check_if_already_done(formants_result_path, self.verbose,
+        @check_if_already_done(formants_result_path,
                                lambda bool_val: bool_val)
         def recognize_formants(segments_path, phonemes_result_path,
                                formants_result_path):
-            if self.verbose > 0:
-                print(f'[INFO] segments_path: {segments_path}')
+            logger.info(f'segments_path: {segments_path}')
             wav = get_segment(segments_path, 'wav')
             frequency = wav.frame_rate
             schema = DecoderOutputSchema()
@@ -121,8 +122,7 @@ class Formants(Chain):
         prerequisites = self.sample_filename_prerequisites()
 
         phonemes_path = prerequisites[0](output_path_pattern)
-        if self.verbose > 0:
-            print(f'[INFO] audio_path: {audio_path}, phonemes_path: {phonemes_path}')
+        logger.info(f'audio_path: {audio_path}, phonemes_path: {phonemes_path}')
         original_freq = True
         _, segments_path = audio_and_segment_paths(audio_path, original_freq)
         self.compute_target(segments_path, phonemes_path, output_path_pattern)
@@ -138,5 +138,4 @@ class Formants(Chain):
         """
         formants_result_path = self.sample_result_filename(output_path_pattern)
         self._compute_formants(segments_path, phonemes_path, formants_result_path)
-        if self.verbose > 0:
-            print(f'[INFO] formants result path: {formants_result_path}')
+        logger.info(f'formants result path: {formants_result_path}')

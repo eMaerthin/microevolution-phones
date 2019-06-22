@@ -108,7 +108,6 @@ class ChainRunnerSettingsSchema(Schema):
     process_settings = fields.Dict()
     results_identifier = fields.String()
     subjects_pattern = fields.List(fields.String())
-    verbose = fields.Number(validate=lambda i: all((i >= 0, i <= 2)))
 
 
 class EventSchema(Schema):

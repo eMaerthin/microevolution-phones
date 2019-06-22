@@ -1,4 +1,5 @@
 import json
+import logging
 
 import numpy as np
 from python_speech_features import mfcc
@@ -7,6 +8,7 @@ from decorators import check_if_already_done
 from format_converters import get_segment
 from schemas import *
 from chains.formants import Formants
+logger = logging.getLogger()
 
 
 class MfccLocal(Formants):
@@ -33,7 +35,7 @@ class MfccLocal(Formants):
         phoneme_len = self.process_settings.get("phoneme_len", 2048)
         ignore_shorter_phonemes = self.process_settings.get("ignore_shorter_phonemes", True)
 
-        @check_if_already_done(mfcc_result_path, self.verbose, lambda x: x)
+        @check_if_already_done(mfcc_result_path, lambda x: x)
         def store_mfcc(segments_path, phonemes_result_path, mfcc_result_path):
             wav = get_segment(segments_path, 'wav')
             frequency = wav.frame_rate
@@ -66,5 +68,4 @@ class MfccLocal(Formants):
     def compute_target(self, segments_path, phonemes_path, output_path_pattern):
         mfcc_result_path = self.sample_result_filename(output_path_pattern)
         self._compute_mfcc(segments_path, phonemes_path, mfcc_result_path)
-        if self.verbose > 0:
-            print(f'[INFO] mfcc result path: {mfcc_result_path}')
+        logger.info(f'mfcc result path: {mfcc_result_path}')
