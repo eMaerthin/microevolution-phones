@@ -7,14 +7,12 @@ name = 'pypi'
 python_version = '3.6'
 
 [packages]
-Django = '==2.2'
 easygui = '*'
 fire = '*'
 marshmallow = "==3.0.0rc5"
 matplotlib = '*'
 MulticoreTSNE = {path = "./thirdparty/Multicore-TSNE"}
 natsort = '==6.0.0'
-networkx = '*'
 numpy = '*'
 pandas = '*'
 parse = '*'
