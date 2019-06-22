@@ -1,6 +1,3 @@
-[submodule "pocketsphinx"]
-	path = pocketsphinx
-	url = git@github.com:cmusphinx/pocketsphinx.git
 [submodule "thirdparty/pocketsphinx"]
 	path = thirdparty/pocketsphinx
 	url = git@github.com:cmusphinx/pocketsphinx.git
