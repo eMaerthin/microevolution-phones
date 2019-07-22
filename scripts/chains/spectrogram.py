@@ -12,8 +12,9 @@ from chains.phoneme import Phoneme
 logger = logging.getLogger()
 
 
-class SpectrogramPipeline(Formants):
+class Spectrogram(Formants):
     requirements = [Phoneme]
+
     @staticmethod
     def result_filename(json_path):
         return f'{json_path[:-5]}_spectrogram_result.json'
@@ -51,12 +52,8 @@ class SpectrogramPipeline(Formants):
                         continue
                     for i in range(len(t)):
                         ith_spectrogram = Sxx[:, i]
-                        # spectrogram_normalized = ith_spectrogram/sum(ith_spectrogram)
-
                         spectrogram_result = {'t': t[i], 'i': i, 'len_t': len(t), 'len_freq': len(freq),
                                               'freq_delta': freq[1] - freq[0], 'signal': ith_spectrogram, **info}
-                            #,
-                            #                  'frequency': freq, 'normalized_signal': spectrogram_normalized}
                         spectrograms_result.append(spectrogram_result)
                 spectrograms = PhonemesSpectrogramsSchema()
                 spectrograms_dict = {'spectrograms_info': spectrograms_result}

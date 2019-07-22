@@ -34,6 +34,8 @@ class MfccLocal(Formants):
     def _compute_mfcc(self, segments_path, phonemes_result_path, mfcc_result_path):
         phoneme_len = self.process_settings.get("phoneme_len", 2048)
         ignore_shorter_phonemes = self.process_settings.get("ignore_shorter_phonemes", True)
+        mfcc_nfft = self.process_settings.get("mfcc_nfft", 2048)
+        mfcc_winstep = self.process_settings.get("mfcc_winstep", 0.1)
 
         @check_if_already_done(mfcc_result_path, lambda x: x)
         def store_mfcc(segments_path, phonemes_result_path, mfcc_result_path):
@@ -51,7 +53,8 @@ class MfccLocal(Formants):
                     segment = np.array(wav[start:stop].get_array_of_samples())
                     if ignore_shorter_phonemes and segment.size < phoneme_len:
                         continue
-                    mfcc_features = mfcc(segment, frequency, nfft=phoneme_len)
+                    mfcc_features = mfcc(segment, samplerate=frequency,
+                                         nfft=mfcc_nfft, winstep=mfcc_winstep)
                     for i in range(len(mfcc_features)):
                         ith_mfcc = np.array(mfcc_features[i, :])
                         ith_mfcc_result_row = {'i': i, 'length': len(mfcc_features),
