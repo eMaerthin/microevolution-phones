@@ -6,11 +6,11 @@ from os.path import (basename, dirname, exists, join, split)
 
 import json
 from pydub import AudioSegment
-from pytube import (compat, extract, Playlist, YouTube)
+from pytube import (compat, Playlist, YouTube)
 from retry import retry
 
 from decorators import check_if_already_done
-from format_converters import get_frame_rate, convert_to_16k_mono_wav, convert_to_mono_wav_original_frame_rate
+from format_converters import convert_to_16k_mono_wav, convert_to_mono_wav_original_frame_rate
 from tkinter import *
 from tqdm import tqdm
 import easygui as g
@@ -144,7 +144,7 @@ def download_youtube_url(url, datatype, output_path_pattern, lang_code):
     caption_path = resolve_caption_path(output_path_pattern, lang_code)
     ignore_already_done = False
 
-    @check_if_already_done(audio_path, ignore_already_done)
+    @check_if_already_done(audio_path, ignore_done=ignore_already_done)
     @retry(KeyError, tries=7, delay=1, backoff=2, logger=logger)
     def download_audio(yt, datatype, audio_path):
         logger.info(f'trying to download youtube movie {url}')
@@ -154,17 +154,20 @@ def download_youtube_url(url, datatype, output_path_pattern, lang_code):
         output_path, filename = split(f'{audio_path[:-4]}')
         stream.download(output_path=output_path, filename=filename)
 
-    @check_if_already_done(caption_path, ignore_already_done)
+    @check_if_already_done(caption_path, ignore_done=ignore_already_done,
+                           validator=lambda v: v)
     @retry(KeyError, tries=7, delay=1, backoff=2, logger=logger)
     def download_caption(yt, caption_path, lang_code):
         if lang_code is None:
             lang_code = 'en' # by default
-            caption = yt.captions.get_by_language_code(lang_code)
-            if caption is not None:
-                logger.info(f'Found valid caption for lang_code: {lang_code}')
-                with open(caption_path, 'w') as f:
-                    f.write(caption.xml_captions)
-            logger.warning(f'A caption for lang_code {lang_code} is not found')
+        caption = yt.captions.get_by_language_code(lang_code)
+        if caption is not None:
+            logger.info(f'Found valid caption for lang_code: {lang_code}')
+            with open(caption_path, 'w') as f:
+                f.write(caption.xml_captions)
+                return True
+        logger.warning(f'A caption for lang_code {lang_code} is not found')
+        return False
 
     @retry(KeyError, tries=7, delay=1, backoff=1, logger=logger)
     def get_yt_handler(url):

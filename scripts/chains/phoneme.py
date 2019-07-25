@@ -16,6 +16,8 @@ logger = logging.getLogger()
 
 class Phoneme(Chain):
     allow_sample_layer_concurrency = True
+    abstract_class = False
+
     requirements = [Preprocess]
 
     def __init__(self):

@@ -19,6 +19,7 @@ class Words(Chain):
     Chain to compute words and summarizes words occurences at levels of individual subject and dataset
     """
     allow_sample_layer_concurrency = True
+    abstract_class = False
     requirements = [Preprocess]
 
     def __init__(self):

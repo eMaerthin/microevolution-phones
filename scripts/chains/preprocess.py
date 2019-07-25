@@ -13,6 +13,8 @@ class Preprocess(Chain):
     At the moment aim of this chain is to download youtube input for other chains
     """
     allow_sample_layer_concurrency = False
+    abstract_class = False
+
     requirements = []
 
     @staticmethod

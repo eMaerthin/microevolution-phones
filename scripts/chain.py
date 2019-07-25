@@ -69,6 +69,7 @@ class Chain(metaclass=protect_abc("load_settings", "merge_data_settings",
     """
 
     allow_sample_layer_concurrency = False
+    abstract_class = True
     ordered_subclasses = []
     requirements = []
     s = {}
@@ -77,11 +78,12 @@ class Chain(metaclass=protect_abc("load_settings", "merge_data_settings",
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
-        cls.subclasses[cls.__name__] = cls
-        chains_dependencies = {value: set(value.requirements)
-                               for value in cls.subclasses.values()}
-        cls.ordered_subclasses[:] = list(toposort_flatten(chains_dependencies,
-                                                          sort=False))
+        if not cls.abstract_class:
+            cls.subclasses[cls.__name__] = cls
+            chains_dependencies = {value: set(value.requirements)
+                                   for value in cls.subclasses.values()}
+            cls.ordered_subclasses[:] = list(toposort_flatten(chains_dependencies,
+                                                              sort=False))
 
     def __init__(self):
         self._base_dir = ''

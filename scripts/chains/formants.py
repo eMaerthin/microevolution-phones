@@ -17,6 +17,7 @@ logger = logging.getLogger()
 class Formants(Chain):
 
     allow_sample_layer_concurrency = True
+    abstract_class = False
     requirements = [Phoneme]
 
     @staticmethod
@@ -52,8 +53,9 @@ class Formants(Chain):
         spectrogram_window = self.process_settings.get('spectrogram_window',
                                                        ('kaiser', 4.0))
         spectrogram_n = self.process_settings.get('spectrogram_n', 5)
+
         @check_if_already_done(formants_result_path,
-                               lambda bool_val: bool_val)
+                               validator=lambda bool_val: bool_val)
         def recognize_formants(segments_path, phonemes_result_path,
                                formants_result_path):
             logger.info(f'segments_path: {segments_path}')

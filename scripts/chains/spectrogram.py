@@ -14,6 +14,8 @@ logger = logging.getLogger()
 
 class Spectrogram(Formants):
     requirements = [Phoneme]
+    abstract_class = False
+
 
     @staticmethod
     def result_filename(json_path):
@@ -31,7 +33,7 @@ class Spectrogram(Formants):
 
     def compute_spectrograms(self, segments_path, phonemes_result_path, spectrogram_result_path,
                              phoneme_len=2048, ignore_shorter_phonemes=True):
-        @check_if_already_done(spectrogram_result_path, lambda x: x)
+        @check_if_already_done(spectrogram_result_path, validator=lambda x: x)
         def store_spectrograms(segments_path, phonemes_result_path, spectrogram_result_path):
             wav = get_segment(segments_path, 'wav')
             frequency = wav.frame_rate

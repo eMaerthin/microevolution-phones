@@ -22,7 +22,6 @@ from schemas import *
 logger = logging.getLogger()
 NORMALIZATION_FACTOR = 1.0  # 8.0  # 255.0
 
-
 def fit_tsne(x, n_components=2, perplexity=30, n_iter=1000, n_iter_without_progress=300):
     assert (n_components is 2)
     tsne = TSNE(n_jobs=4, n_components=n_components, perplexity=perplexity,
@@ -443,8 +442,9 @@ def split_events_by_offset(events, split_params):
     frame_id = []
     points = split_params.get('points', 20000)
     jump = split_params.get('jump', 1000)
-    for start_idx in range(0, len(events) - points, jump):
-        split.append(events[start_idx:start_idx + points].copy())
+    for start_idx in range(0, len(events), jump):
+        length = min(points, len(events) - start_idx)
+        split.append(events[start_idx:start_idx + length].copy())
         frame_id.append(start_idx/points)
     return split, frame_id
 
@@ -515,10 +515,12 @@ def split_events_by_fitting_to_shape(events, split_params):
 
     for i, subject in enumerate(subjects):
         subject_events = [event for event in events if event.subject == subject]
-
+        logger.info(f' strategy params: {strategy_params} , len(sub_ev): {len(subject_events)}')
         current_splits, current_frame_ids = split_events(subject_events, strategy_params)
-        max_frame_id = current_frame_ids[-1]
+        logger.info(f' subject: {subject} -> {len(current_frame_ids)}')
+
         for current_split, current_frame_id in zip(current_splits, current_frame_ids):
+            max_frame_id = current_frame_ids[-1]
             index = i * out_shape[1] + ( (current_frame_id * out_shape[1]) // (max_frame_id + 1) )
             if index in split_dict:
                 split_dict[index].extend(current_split)
@@ -647,8 +649,10 @@ def draw_metrics(result_path, events, converters, split_params=None,
     mng = plt.get_current_fig_manager()
     mng.resize(*mng.window.maxsize())
     part2_x = np.array(metrics)
-    part2_tsne = fit_tsne(part2_x)
-
+    perplexity = 5
+    #if part2_x.shape[0] < 100:
+    #    perplexity = 5
+    part2_tsne = fit_tsne(part2_x, perplexity=perplexity)
     logger.debug(f'tsne: {part2_tsne}')
     p2_x1, p2_x2 = zip(*part2_tsne)
     colours = ['red', 'green', 'blue', 'black', 'magenta', 'yellow', 'purple']
@@ -659,7 +663,7 @@ def draw_metrics(result_path, events, converters, split_params=None,
         #for (i, (x, y, title)) in enumerate(zip(p2_x1, p2_x2, titles)):
         #    ax.text(x, y, title)
     result_path_dynamics = f'{result_path[:-4]}_dynamics.png'
-    plt.savefig(result_path_dynamics, dpi='figure', frameon=True, bbox_inches=None)
+    plt.savefig(result_path_dynamics, dpi='figure', bbox_inches=None)
 
 def draw_events(result_path, events, converters, split_params=None,
                 bins=(30, 30), disk_radius=2,
@@ -730,7 +734,7 @@ def draw_events(result_path, events, converters, split_params=None,
         # ax.set_title(title, fontsize=8)
         ax.pcolormesh(m1, m2, histogram, zorder=1, vmin=0.0,  # vmax=vmax,
                       cmap='gray_r')  # cmap='RdBu') #, shading='gouraud') #150) #0.0001) # cmap='RdBu',
-    plt.savefig(result_path, dpi=450, frameon=True, bbox_inches=None)
+    plt.savefig(result_path, dpi=450, bbox_inches=None)
 
     fig, axes = plt.subplots(nrows=1, ncols=1, sharex=True, sharey=True, squeeze=False)
     axes1d = axes.flatten()
@@ -748,5 +752,5 @@ def draw_events(result_path, events, converters, split_params=None,
         for (i, (x, y, title)) in enumerate(zip(p2_x1, p2_x2, titles)):
             ax.text(x, y, title)
     result_path_dynamics = f'{result_path[:-4]}_dynamics.png'
-    plt.savefig(result_path_dynamics, dpi='figure', frameon=True, bbox_inches=None)
+    plt.savefig(result_path_dynamics, dpi='figure', bbox_inches=None)
     # animated_path_dynamics = f'{result_path[:-4]}_animated_dynamics.mp4'

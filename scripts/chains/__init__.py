@@ -6,6 +6,6 @@ from . import (formants,
                tsne_mfcc_local,
                words,
                spectrogram,
-               # tsne_mfcc_global,
+               tsne_mfcc_global,
                # tsne_attempt2 # , tsne
                )

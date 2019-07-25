@@ -22,14 +22,14 @@ def timeit(func):
     return timed
 
 
-class CheckIfDone:
-    def __init__(self, function, check_path, validator=None,
-                 ignore_done=False):
+class _CheckIfDone:
+    """https://stackoverflow.com/questions/7492068/python-class-decorator-arguments"""
+    def __init__(self, function, check_path, validator=None, ignore_done=False):
         self.function = function
         self.check_path = check_path
         self.validator = validator
         self.ignore_done = ignore_done
-        functools.update_wrapper(self, function)
+        functools.update_wrapper(self, function)  # this is class equivalent of @functools.wraps
 
     def done_path(self):
         return f'{self.check_path}.done'
@@ -42,8 +42,12 @@ class CheckIfDone:
         return hash_md5.hexdigest()
 
     def __call__(self, *args, **kwargs):
-        skip = False
-        if isfile(self.done_path()) and not self.ignore_done:
+        if not self.check_path:
+            self.check_path = kwargs.get('check_path')
+            if not self.check_path:
+                logger.warning(f'check_path not provided')
+
+        if self.check_path and isfile(self.done_path()) and not self.ignore_done:
             with open(self.done_path(), 'r') as f:
                 reference_md5 = f.read()
             if reference_md5 == self.md5_signature():
@@ -56,75 +60,20 @@ class CheckIfDone:
                            f' the result has to be re-run')
 
         ret_val = self.function(*args, **kwargs)
-        if self.validator is None or self.validator(ret_val):
-            if self.ignore_done and isfile(self.done_path()):
-
+        if not self.validator or self.validator(ret_val):
             with open(self.done_path(), 'w') as f:
                 f.write(self.md5_signature())
         return ret_val
 
-"""
-value = None
-            if not isfile(done(check_path)) or ignore_already_done:
-                value = func(*args, **kwargs)
-                task_done = True
-                if ret_value_validator:
-                    task_done = ret_value_validator(value)
-                if task_done:
-                    with open(done(check_path), 'w') as f:
-                        f.write('OK')
-            logger.info(f'skipping evaluating this method'
-                        f' because {done(check_path)} already exists'
-                        ' - hence ignoring return value!')
-            return value
-            """
 
-def check_if_already_done(check_path,
-                          ret_value_validator=None,
-                          ignore_already_done=False):
+def check_if_already_done(check_path=None, validator=None, ignore_done=False):
     """
-        Useful decorator to speed up evaluation of the chain.
-        Main purpose is to not calculate values of the same
-        nodes of the chain more than once.
-        :param check_path: path to be checked if
-        we already know the result of the method
-        :param ret_value_validator: validates if
-        function terminates properly - translates
-        outcome of the function to either True or False.
-        :param ignore_already_done: if set, will
-        run the decorated method even if it was already
-        done
-
-    TODO:
-    1. decorator does not need an extra parameter -
-    they can read the result_path from *args, also all check_if_already_done decorated methods
-    can be converted into members of a class that has automatically inserted check_if_already_
-    done + require result_path param
-    2. those decorated methods should have better implementation of the what-if-already-done
-    meaning that they should already return required value if any
-
+    This logic assumes check_path is provided or given in kwargs of the function being wrapped around
+    :param check_path: if it is None then wrapper function parameter is expected to have such a keyword param
+    :param validator:
+    :param ignore_done:
     :return:
     """
-    def done(path):
-        return f'{path}.done'
-
-    def decorator_if_already_done(func):
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            value = None
-            if not isfile(done(check_path)) or ignore_already_done:
-                value = func(*args, **kwargs)
-                task_done = True
-                if ret_value_validator:
-                    task_done = ret_value_validator(value)
-                if task_done:
-                    with open(done(check_path), 'w') as f:
-                        f.write('OK')
-            logger.info(f'skipping evaluating this method'
-                        f' because {done(check_path)} already exists'
-                        ' - hence ignoring return value!')
-            return value
-
-        return wrapper
-
-    return decorator_if_already_done
+    def wrapper(function):
+        return _CheckIfDone(function, check_path, validator, ignore_done)
+    return wrapper
