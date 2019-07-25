@@ -1,3 +1,9 @@
-[submodule "pocketsphinx"]
-	path = pocketsphinx
+[submodule "thirdparty/pocketsphinx"]
+	path = thirdparty/pocketsphinx
 	url = git@github.com:cmusphinx/pocketsphinx.git
+[submodule "thirdparty/pytube"]
+	path = thirdparty/pytube
+	url = git@github.com:nficano/pytube.git
+[submodule "thirdparty/Multicore-TSNE"]
+	path = thirdparty/Multicore-TSNE
+	url = git@github.com:sg-s/Multicore-TSNE.git

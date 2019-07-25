@@ -7,15 +7,23 @@ name = 'pypi'
 python_version = '3.6'
 
 [packages]
+easygui = '*'
 fire = '*'
-marshmallow = "==3.0.0rc3"
+marshmallow = "==3.0.0rc5"
 matplotlib = '*'
-MulticoreTSNE = '*'
+MulticoreTSNE = {path = "./thirdparty/Multicore-TSNE"}
+natsort = '==6.0.0'
 numpy = '*'
 pandas = '*'
 parse = '*'
 pocketsphinx = '*'
 pydub = '*'
-pytube = '*'
+pytest = '==4.4.1'
+python_speech_features = '*'
+pytube = {editable = true,path = "./thirdparty/pytube"}
+retry = '*'
+scikit-image = '*'
 scipy = '*'
 sklearn = '*'
+toposort = '==1.5'
+tqdm = '==4.31.1'

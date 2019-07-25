@@ -2,35 +2,27 @@ import ssl
 
 import fire
 
-from pipeline import Pipeline
-import pipelines
+from audio_processors import process_playlist_url
+from chain_runner import ChainRunner
 
 ssl._create_default_https_context = ssl._create_stdlib_context
 
-
-def process_phonemes_pipeline(subjects_homedir='../subjects/', verbose=1):
-    pipeline = Pipeline.subclasses['PhonemePipeline'](verbose, subjects_homedir)
-    pipeline.process_pipeline()
-
-
-def process_formants_pipeline(subjects_homedir='../subjects/', verbose=1):
-    pipeline = Pipeline.subclasses['FormantsPipeline'](verbose, subjects_homedir)
-    pipeline.process_pipeline()
-
-
-def run_all_pipelines(subjects_homedir='../subjects/', verbose=1):
-    print('here')
-    print(Pipeline.subclasses)
-    for k, v in Pipeline.subclasses.items():
-        print('there')
-        if verbose > 0:
-            print(f'running pipeline {k}')
-        v(verbose, subjects_homedir).process_pipeline()
-
-
 if __name__ == '__main__':
+    from logging.config import fileConfig
+    fileConfig('logging.conf')
+    """
+    This is entry point of the library
+    
+    - 'playlist' option should be used to populate (file-based) database 
+    based on youtube playlist url
+    
+    example use: 
+    1) playlist
+    2) run --dataset_home_dir '/Volumes/Transcend/phd/microevolution-lang-phones-data/subjects/dummy_test/' process-chains
+    3) run --dataset_home_dir '/Volumes/Transcend/phd/microevolution-lang-phones-data/subjects/dummy_test/' process-chain --chain_name Formants
+    4) run from_experiment_config --experiment-config-path '/Volumes/Transcend/phd/microevolution-lang-phones-data/subjects/dummy_test/_configs/test-config.json' process-chains
+    """
     fire.Fire({
-              'run': run_all_pipelines,
-              'phonemes': process_phonemes_pipeline,
-              'formants': process_formants_pipeline,
+              'playlist': process_playlist_url,
+              'run': ChainRunner
               })
