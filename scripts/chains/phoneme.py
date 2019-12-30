@@ -1,6 +1,6 @@
 import json
 import logging
-from os.path import join
+from os.path import join, splitext
 from pocketsphinx.pocketsphinx import Decoder
 
 from audio_processors import (audio_and_segment_paths, resolve_audio_path)
@@ -17,7 +17,6 @@ logger = logging.getLogger()
 class Phoneme(Chain):
     allow_sample_layer_concurrency = True
     abstract_class = False
-
     requirements = [Preprocess]
 
     def __init__(self):
@@ -26,7 +25,8 @@ class Phoneme(Chain):
 
     @staticmethod
     def sample_result_filename(out_sample_path):
-        return f'{out_sample_path[:-5]}_phoneme_result.json'
+        filename, _ = splitext(out_sample_path)
+        return f'{filename}_phoneme_result.json'
 
     def _compute_phonemes(self, segments_path, phonemes_result_path):
         """

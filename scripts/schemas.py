@@ -113,7 +113,7 @@ class ChainRunnerSettingsSchema(Schema):
 class EventSchema(Schema):
     """
     x - features
-    label - word.value (usually phoneme 'AH' or word 'car')
+    label - word.value (usually phoneme e.g. 'AH' or word e.g. 'car')
     timestamp - timestamp preprocessed to [0,1] range
     timestamp_raw - raw timestamp based on date when video was published
     subject - identifier of the subject

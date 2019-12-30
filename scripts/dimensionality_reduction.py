@@ -106,7 +106,7 @@ def draw_composition(Xs, ys, result_path, out_shape=None, agg_shape=None,
     for ax, title, x, y in zip(axes1d, t_list, x_list, y_list):
         x1, x2 = zip(*x)
         # y = ys[i]
-        remaining_labels = sorted(list(set(y)))
+        remaining_labels = sorted(set(y))
         '''for label in remaining_labels:
             p1 = [p for l, p in zip(y, x1) if l is label]
             p2 = [p for l, p in zip(y, x2) if l is label]
@@ -415,8 +415,8 @@ def preprocess_events(events, base_dir):
     colors = ["red", "green", "blue", "orange", "purple", "pink", "yellow"]
     subjects = [event.subject for event in events]
     labels = [event.label for event in events]
-    unique_subjects = sorted(list(set(subjects)))
-    unique_labels = sorted(list(set(labels)))
+    unique_subjects = sorted(set(subjects))
+    unique_labels = sorted(set(labels))
     converters = dict()
     for subject in unique_subjects:
         color = colors[unique_subjects.index(subject) % len(colors)]
@@ -453,7 +453,7 @@ def split_events_by_lifespan(events, split_params):
     split = []
     frame_id = []
     lifespan = split_params.get('lifespan', 120)
-    subjects = set((event.subject for event in events))
+    subjects = sorted(set((event.subject for event in events)))
     for subject in subjects:
         subject_events = [event for event in events if event.subject == subject]
         def by_timestamp_raw(obj):
@@ -485,13 +485,10 @@ def split_events_by_recordings(events, split_params):
     """
     split = []
     frame_id = []
-    samples = OrderedDict.fromkeys([(event.subject, event.sample) for event in events])
-    subjects = set((event.subject for event in events))
-    subject_counters = {subject: 0 for subject in subjects}
-    for subject, sample in samples.keys():
+    sorted_pairs = sorted(set((event.subject, event.sample) for event in events))
+    for i, (subject, sample) in enumerate(sorted_pairs):
         split.append([event for event in events if event.sample == sample and event.subject == subject])
-        frame_id.append(subject_counters[subject])
-        subject_counters[subject] += 1
+        frame_id.append(i)
     return split, frame_id
 
 
@@ -503,8 +500,7 @@ def split_events_by_fitting_to_shape(events, split_params):
         split = [events]
         frame_id = [0]
         return split, frame_id
-    subjects = list(set(event.subject for event in events))
-    subjects.sort()
+    subjects = sorted(set(event.subject for event in events))
     # the above line is faster than OrderedDict.fromkeys(event.subject for event in events)
 
     assert(out_shape[0] == len(subjects))
@@ -517,8 +513,7 @@ def split_events_by_fitting_to_shape(events, split_params):
         subject_events = [event for event in events if event.subject == subject]
         logger.info(f' strategy params: {strategy_params} , len(sub_ev): {len(subject_events)}')
         current_splits, current_frame_ids = split_events(subject_events, strategy_params)
-        logger.info(f' subject: {subject} -> {len(current_frame_ids)}')
-
+        logger.info(f' subject: {subject} -> {len(current_frame_ids)} vs {len(current_splits)}')
         for current_split, current_frame_id in zip(current_splits, current_frame_ids):
             max_frame_id = current_frame_ids[-1]
             index = i * out_shape[1] + ( (current_frame_id * out_shape[1]) // (max_frame_id + 1) )
@@ -526,7 +521,6 @@ def split_events_by_fitting_to_shape(events, split_params):
                 split_dict[index].extend(current_split)
             else:
                 raise IndexError('invalid index')
-
     split = list(split_dict.values())
     frame_id = list(split_dict.keys())
     return split, frame_id  # tuple(zip(*sorted_id))  # (split_sorted, frame_id_sorted)
@@ -537,6 +531,8 @@ def split_events_by_fitting_to_shape(events, split_params):
 
 def split_events(events, split_params):
     strategy = split_params.get('strategy', 'offset')
+    logger.debug(f'selected strategy: {strategy}')
+    logger.debug(f'events len: {len(events)}')
     split_func = {'offset': split_events_by_offset,
                   'lifespan': split_events_by_lifespan,
                   'recordings': split_events_by_recordings,
@@ -613,12 +609,14 @@ def draw_metrics(result_path, events, converters, split_params=None,
                 bins=(30, 30), disk_radius=2,
                 out_shape=None, drawing_subsamples=False,
                 sup_title=None, validation=None):
-
+    """
+    TODO refactor, refactor, refactor
+    """
     event_split, frame_ids = split_events(events, split_params)
     xs = np.array([event.x for event in events])
     min_x1, min_x2 = np.amin(xs, axis=0)
     max_x1, max_x2 = np.amax(xs, axis=0)
-    logger.debug(f'limits: {(min_x1, min_x2, max_x1, max_x2)}')
+    logger.debug(f'limits (draw_metrics): {(min_x1, min_x2, max_x1, max_x2)}')
 
     x_edges = np.linspace(min_x1, max_x1, bins[0], endpoint=True)
     y_edges = np.linspace(min_x2, max_x2, bins[1], endpoint=True)
@@ -631,7 +629,7 @@ def draw_metrics(result_path, events, converters, split_params=None,
     titles = []
     metrics = []
     subjects_ids = []
-    subjects = list(set([event.subject for event in events]))
+    subjects = sorted(set([event.subject for event in events]))
 
     for event_packet, frame_idx in zip(event_split, frame_ids):
 
@@ -649,9 +647,11 @@ def draw_metrics(result_path, events, converters, split_params=None,
     mng = plt.get_current_fig_manager()
     mng.resize(*mng.window.maxsize())
     part2_x = np.array(metrics)
-    perplexity = 5
+    perplexity = 10
+    logger.debug(f'low perplexity {perplexity}? samples shape: {part2_x.shape}')
     #if part2_x.shape[0] < 100:
     #    perplexity = 5
+    return
     part2_tsne = fit_tsne(part2_x, perplexity=perplexity)
     logger.debug(f'tsne: {part2_tsne}')
     p2_x1, p2_x2 = zip(*part2_tsne)
@@ -665,19 +665,21 @@ def draw_metrics(result_path, events, converters, split_params=None,
     result_path_dynamics = f'{result_path[:-4]}_dynamics.png'
     plt.savefig(result_path_dynamics, dpi='figure', bbox_inches=None)
 
+
 def draw_events(result_path, events, converters, split_params=None,
                 bins=(30, 30), disk_radius=2,
                 out_shape=None, drawing_subsamples=False,
                 sup_title=None, validation=None):
+    """
+    TODO refactor refactor refactor. ...
+    """
 
-    split_params = {'strategy': 'fit_to_shape',
-                    'additional_params': split_params,
-                    'out_shape': out_shape}
+    logger.debug(f'split_params: {split_params}')
     event_split, frame_ids = split_events(events, split_params)
     xs = np.array([event.x for event in events])
     min_x1, min_x2 = np.amin(xs, axis=0)
     max_x1, max_x2 = np.amax(xs, axis=0)
-    logger.debug(f'limits: {(min_x1, min_x2, max_x1, max_x2)}')
+    logger.debug(f'limits (draw_events): {(min_x1, min_x2, max_x1, max_x2)}')
 
     x_edges = np.linspace(min_x1, max_x1, bins[0], endpoint=True)
     y_edges = np.linspace(min_x2, max_x2, bins[1], endpoint=True)
@@ -694,7 +696,7 @@ def draw_events(result_path, events, converters, split_params=None,
 
     result_frames = {}
     titles = []
-    for event_packet, frame_idx in zip(event_split, frame_ids):
+    for i, (event_packet, frame_idx) in enumerate(zip(event_split, frame_ids)):
         if drawing_subsamples:
             shuffle(event_packet)
             event_packet = event_packet[:min_samples]
@@ -706,7 +708,6 @@ def draw_events(result_path, events, converters, split_params=None,
         titles.append(f'{event_packet[0].sample}')  # -{event_packet[0].sample}')
 
         vmax = max(vmax, np.max(histogram))
-
     fig_rows, fig_cols = out_shape
     validation_correct = parse_validation(validation) # validation is used to put validation information into the last column
     if validation_correct:
@@ -741,7 +742,10 @@ def draw_events(result_path, events, converters, split_params=None,
     mng = plt.get_current_fig_manager()
     mng.resize(*mng.window.maxsize())
     part2_x = np.array(metrics)
-    part2_tsne = fit_tsne(part2_x, perplexity=1)
+    # ok I am switching perplexity to 1 let's find out..
+    # previously there was this: logger.info('running tsne with low perplexity 1! why?')
+    lower_perplexity = 1
+    part2_tsne = fit_tsne(part2_x, perplexity=lower_perplexity)
 
     logger.debug(f'tsne: {part2_tsne}')
     p2_x1, p2_x2 = zip(*part2_tsne)

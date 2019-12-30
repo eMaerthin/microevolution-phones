@@ -210,6 +210,7 @@ class Chain(metaclass=protect_abc("load_settings", "merge_data_settings",
         relative to the output directory of the current subject
         :return: filename
         """
+        pass
 
     @staticmethod
     def filenames_to_skip_sample(out_sample_path):
@@ -375,27 +376,15 @@ class Chain(metaclass=protect_abc("load_settings", "merge_data_settings",
         if not self._check_skip_conditions('subject', output_subject_dir):
             if self.allow_sample_layer_concurrency:
                 p = Pool(cpu_count())
-                p.map(self.wrap_sample_layer, [(sample_json_filename, subject, subject_settings) for sample_json_filename in samples])
+                p.map(self.wrap_sample_layer,
+                      [(sample_json_filename, subject, subject_settings)
+                       for sample_json_filename in samples])
                 p.close()
                 p.join()
             else:
-                [self.wrap_sample_layer((sample_json_filename, subject, subject_settings)) for sample_json_filename in samples]
-                #
-                # sample_settings = self.load_settings(join(self.base_dir, subject), sample_json_filename)
-                # output_path_pattern = join(self.results_dir, subject, sample_json_filename)
-                # if self._check_skip_conditions('sample', output_path_pattern):
-                #     return
-                # raise_error = self.process_settings.get("raise_error_on_conflict_values",
-                #                                         False)
-                # sample_settings = self.merge_data_settings(subject_settings, sample_settings,
-                #                                            raise_error)
-                # self.sample_layer(subject, sample_json_filename, sample_settings)
+                [self.wrap_sample_layer((sample_json_filename, subject, subject_settings))
+                 for sample_json_filename in samples]
 
-            #    Process(target=self.wrap_sample_layer, args=(sample_json_filename, subject, subject_settings, lock)).start()
-            # with Executor(max_workers=4) as exe:
-            #     jobs = [exe.submit(self.wrap_sample_layer, sample_json_filename, subject, subject_settings, lock)
-            #             ]
-            #     [job.result() for job in jobs]
         self.subject_postprocess(subject, samples, subject_settings)
 
     def dataset_layer(self, dataset):
@@ -416,7 +405,8 @@ class Chain(metaclass=protect_abc("load_settings", "merge_data_settings",
                     input_dir = join(self.base_dir, subject)
                     subject_settings = self.load_settings(input_dir, 'common.json')
                     self.subject_layer(subject, samples, subject_settings)
-                logger.info(f'Subject {subject} discarded due to subjects_pattern {self.subjects_pattern}')
+                else:
+                    logger.info(f'Subject {subject} discarded due to subjects_pattern {self.subjects_pattern}')
         self.dataset_postprocess(dataset)
 
     def process(self):

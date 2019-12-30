@@ -4,15 +4,14 @@ from os.path import join
 
 import pandas as pd
 
-from chains.tsne_mfcc import TsneMfcc
 from chains.mfcc_local import MfccLocal
+from chains.tsne_mfcc import TsneMfcc
 from schemas import *
 logger = logging.getLogger()
 
 
 class TsneMfccLocal(TsneMfcc):
     abstract_class = False
-
     requirements = [MfccLocal]
 
     @staticmethod
@@ -53,7 +52,7 @@ class TsneMfccLocal(TsneMfcc):
             return True
 
     @staticmethod
-    def labels_timestamps_from_df(df, published_timestamp):
+    def labels_timestamps_from_df(df, published_timestamp, winstep=0.01):
         labels = df.word.values
-        timestamps = [published_timestamp + delta for delta in df.start.values]
+        timestamps = [published_timestamp + delta + i * winstep for (delta, i) in zip(df.start.values, df.i.values)]
         return labels, timestamps

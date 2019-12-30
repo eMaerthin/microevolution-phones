@@ -1,20 +1,20 @@
 import json
 import logging
-from os.path import (dirname, join)
+import os
 
 import numpy as np
 from scipy.signal import (argrelmax, spectrogram)
 
-from audio_processors import audio_and_segment_paths
+from chains.labeled_base import DEFAULT_BLACKLISTED_LABELS, LabeledBase
+from chains.phoneme import Phoneme
 from decorators import check_if_already_done
 from format_converters import get_segment
 from schemas import *
-from chain import Chain
-from chains.phoneme import Phoneme
+
 logger = logging.getLogger()
 
 
-class Formants(Chain):
+class Formants(LabeledBase):
 
     allow_sample_layer_concurrency = True
     abstract_class = False
@@ -22,29 +22,19 @@ class Formants(Chain):
 
     @staticmethod
     def sample_result_filename(out_sample_path):
-        return f'{out_sample_path[:-5]}_formants_result.json'
+        filename, _ = os.path.splitext(out_sample_path)
+        return f'{filename}_formants_result.json'
 
     @staticmethod
     def filenames_to_skip_sample(out_sample_path):
-        return [f'{out_sample_path[:-5]}_formants_result.csv']
+        filename, _ = os.path.splitext(out_sample_path)
+        return [f'{filename}_formants_result.csv']
 
     @staticmethod
     def sample_filename_prerequisites():
         return [Phoneme.sample_result_filename]
 
-    _blacklisted_phonemes = ['SIL', '+SPN+', '+NSN+']
-
-    @property
-    def blacklisted_phonemes(self):
-        return self._blacklisted_phonemes
-
-    @blacklisted_phonemes.setter
-    def blacklisted_phonemes(self, new_value):
-        if isinstance(new_value, list):
-            self._blacklisted_phonemes = new_value
-        else:
-            raise TypeError(f'blacklisted_phonemes setter expected list,'
-                            f' got {type(new_value)}')
+    _blacklisted = DEFAULT_BLACKLISTED_LABELS
 
     def _compute_formants(self, segments_path, phonemes_result_path,
                           formants_result_path):
@@ -64,11 +54,11 @@ class Formants(Chain):
             schema = DecoderOutputSchema()
             with open(phonemes_result_path, 'r') as f:
                 json_file = json.load(f)
-                phonemes_result = schema.load(json_file)
-                phonemes_info = [info for info in phonemes_result['segment_info']
-                                 if info['word'] not in self.blacklisted_phonemes]
+                labels_result = schema.load(json_file)
+                labels_info = [info for info in labels_result['segment_info']
+                               if info['word'] not in self.blacklisted_labels]
                 formants_result = []
-                for info in phonemes_info:
+                for info in labels_info:
                     start, stop = (1000 * info['start'],
                                    1000 * info['end'])
                     segment = np.array(wav[start:stop].get_array_of_samples())
@@ -99,35 +89,6 @@ class Formants(Chain):
                     f.write(result)
                     return True
         recognize_formants(segments_path, phonemes_result_path, formants_result_path)
-
-    def sample_layer(self, subject, sample_json_filename, sample_settings):
-
-        def mp4_path(sample):
-            return f'{sample[:-5]}_audio.mp4'
-        url = sample_settings.get('url')
-        datatype = sample_settings.get('datatype')
-        assert(datatype is not None)
-
-        output_path_pattern = join(self.results_dir, subject, sample_json_filename)
-
-        if url.startswith('http'):
-            # TODO Currently, that's only audio extension we support - better check now than later:
-            assert datatype == 'mp4'
-            audio_path = mp4_path(output_path_pattern)
-        elif url.endswith(datatype):
-            audio_path = join(dirname(output_path_pattern), url)
-        else:
-            raise ValueError(f'unhandled url: {url} (settings: {sample_settings})')
-        if not exists(audio_path):
-            raise FileNotFoundError(f'File not found {audio_path}')
-
-        prerequisites = self.sample_filename_prerequisites()
-
-        phonemes_path = prerequisites[0](output_path_pattern)
-        logger.info(f'audio_path: {audio_path}, phonemes_path: {phonemes_path}')
-        original_freq = True
-        _, segments_path = audio_and_segment_paths(audio_path, original_freq)
-        self.compute_target(segments_path, phonemes_path, output_path_pattern)
 
     def compute_target(self, segments_path, phonemes_path, output_path_pattern):
         """

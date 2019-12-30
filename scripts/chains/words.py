@@ -58,7 +58,6 @@ class Words(Chain):
         decoder_mmap = self.process_settings.get('decoder_mmap', False)
         decoder_stream_buf_size = self.process_settings.get('decoder_stream_buf_size',
                                                             8192)
-        pprint_indent = self.process_settings.get('pprint_indent', 4)
         hypothesis = PocketsphinxHypothesisSchema()
         ph_info = PocketsphinxSegmentSchema()
 
@@ -117,12 +116,16 @@ class Words(Chain):
                 f.write(words_result)
 
         recognize_words(segments_path, words_result_path)
+        self.read_words_from_file(words_result_path)
 
+    def read_words_from_file(self, words_result_path):
         with open(words_result_path, 'r') as f:
             logger.debug(f'words_result_path: {words_result_path}')
             json_file = json.load(f)
             result = DecoderOutputSchema().load(json_file)
+            pprint_indent = self.process_settings.get('pprint_indent', 4)
             logger.debug(json.dumps(result, indent=pprint_indent))
+            return result
 
     def sample_layer(self, subject, sample_json_filename, sample_settings):
         url = sample_settings.get('url')

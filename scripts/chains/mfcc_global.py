@@ -1,11 +1,14 @@
 import logging
+import os
 
 import numpy as np
 from python_speech_features import mfcc
 
+from chains.mfcc import Mfcc
+from chains.phoneme import Phoneme
 from format_converters import get_segment
 from schemas import *
-from chains.mfcc import Mfcc
+
 logger = logging.getLogger()
 
 
@@ -15,19 +18,20 @@ class MfccGlobal(Mfcc):
     (based on segments wav) - i.e. without using information
     about phoneme label that can be received from Phoneme chain
 
-    It subclasses Formants to not repeat the sample_layer logic
-    which is valid also in this context
+    It subclasses abstract chain class Mfcc
     """
-
+    requirements = [Phoneme]
     abstract_class = False
 
     @staticmethod
     def sample_result_filename(out_sample_path):
-        return f'{out_sample_path[:-5]}_mfcc_global_result.json'
+        filename, _ = os.path.splitext(out_sample_path)
+        return f'{filename}_mfcc_global_result.json'
 
     @staticmethod
     def filenames_to_skip_sample(out_sample_path):
-        return [f'{out_sample_path[:-5]}_mfcc_global_result.csv']
+        filename, _ = os.path.splitext(out_sample_path)
+        return [f'{filename}_mfcc_global_result.csv']
 
     @staticmethod
     def serialize_to_json(mfcc_result):
@@ -40,16 +44,16 @@ class MfccGlobal(Mfcc):
         mfcc_dict = {'mfcc_global_info': mfcc_result}
         return mfcc_global_schema.dumps(mfcc_dict)
 
-    def compute_mfcc(self, segments_path, phonemes_result_path):
+    def compute_mfcc(self, segments_path, labels_result_path):
         """
 
         :param segments_path: path to the input wav
-        :param phonemes_result_path: path to phonemes results
+        :param labels_result_path: path to phonemes results
         that is required by the Local version of the Mfcc
         :return: computed list of mfcc features with all required metadata
         """
         mfcc_nfft = self.process_settings.get("mfcc_nfft", 2048)
-        mfcc_winstep = self.process_settings.get("mfcc_winstep", 0.1)
+        mfcc_winstep = self.process_settings.get("mfcc_winstep", 0.01)
         wav = get_segment(segments_path, 'wav')
         frequency = wav.frame_rate
         mfcc_result = []

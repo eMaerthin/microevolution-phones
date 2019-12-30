@@ -29,7 +29,7 @@ class TsneMfcc(Chain):
         mfcc_csv_result_path = self.sample_result_filename(output_path_pattern)
 
         @timeit
-        @check_if_already_done(mfcc_csv_result_path, validator=lambda v: v)  # , ignore_already_done=True)
+        @check_if_already_done(mfcc_csv_result_path, validator=lambda v: v)
         def _store_mfcc_result_as_csv(mfcc_result_path, mfcc_csv_result_path):
             self.serialized_mfcc_to_csv(mfcc_result_path, mfcc_csv_result_path)
 
@@ -38,15 +38,16 @@ class TsneMfcc(Chain):
         df = pd.read_csv(mfcc_csv_result_path)
         # df = df[df.i == 0]
         metadata = sample_settings.get('metadata')
-        published_timestamp = metadata.get('published_timestamp', 0.0)
-        labels, timestamps = self.labels_timestamps_from_df(df, published_timestamp)
+        winstep = self.process_settings.get("mfcc_winstep", 0.01)
+        published_timestamp = 0.0
+        if isinstance(metadata, dict):
+            published_timestamp = metadata.get('published_timestamp', 0.0)
+        labels, timestamps = self.labels_timestamps_from_df(df, published_timestamp, winstep)
         df = df[[col for col in df.columns if col.endswith('_mfcc_features')]]
         xs = df.values
         self._events.extend([Event(x, label, timestamp, timestamp,
                                    subject, sample_json_filename)
-                             for (x, label,
-                                  timestamp) in zip(xs, labels,
-                                                    timestamps)])
+                             for (x, label, timestamp) in zip(xs, labels, timestamps)])
 
     @abstractmethod
     def serialized_mfcc_to_csv(self, mfcc_result_path, mfcc_csv_result_path):
@@ -54,7 +55,7 @@ class TsneMfcc(Chain):
 
     @staticmethod
     @abstractmethod
-    def labels_timestamps_from_df(df, published_timestamp):
+    def labels_timestamps_from_df(df, published_timestamp, winstep):
         pass
 
     @staticmethod
@@ -72,8 +73,12 @@ class TsneMfcc(Chain):
         perplexity = self.process_settings.get('tsne_perplexity', 40)
         pca_components = self.process_settings.get('pca_components', 10)
         method = self.process_settings.get('visualization_method', 'pca_tsne')
-        filter = list(self.process_settings.get('tsne_phoneme_filter', self.process_settings.get('visualization_phoneme_filter', '')))
-        filter_local = list(self.process_settings.get('draw_phoneme_filter', self.process_settings.get('visualization_phoneme_filter_local', '')))
+        tsne_label_filter = list(self.process_settings.get('tsne_label_filter',
+                                 self.process_settings.get('tsne_phoneme_filter',
+                                 self.process_settings.get('visualization_phoneme_filter', ''))))
+        draw_label_filter = list(self.process_settings.get('draw_label_filter',
+                                 self.process_settings.get('draw_phoneme_filter',
+                                 self.process_settings.get('visualization_phoneme_filter_local', ''))))
         out_shape = self.process_settings.get('visualization_out_shape', (1, 1))
         drawing_subsamples = self.process_settings.get('visualization_drawing_subsamples', False)
         agg_lists = self.process_settings.get('visualization_agg_lists', None)
@@ -102,10 +107,11 @@ class TsneMfcc(Chain):
 
         working_dir = self.results_dir
 
-        if filter and len(filter) > 0:
-            self._events = [event for event in self._events if event.label in filter]
+        if tsne_label_filter and len(tsne_label_filter) > 0:
+            self._events = [event for event in self._events
+                            if event.label in tsne_label_filter]
 
-        filter_hash = '_'.join(sorted(filter))
+        filter_hash = '_'.join(sorted(tsne_label_filter))
 
         def cache_fit_tsne(tsne_mfcc_result_path, events):
             x = np.array([event.x for event in events])
@@ -148,22 +154,22 @@ class TsneMfcc(Chain):
         with open(result_path, 'rb') as f:
             vis_events, converters = preprocess_events(loads(f.read()), self.base_dir)
 
-            if filter_local and len(filter_local):
-                vis_events[:] = [event for event in vis_events if event.label in filter_local]
+            if draw_label_filter and len(draw_label_filter):
+                vis_events[:] = [event for event in vis_events if event.label in draw_label_filter]
 
-            filter_local_hash = '_'.join(sorted(filter_local))
+            filter_local_hash = '_'.join(sorted(draw_label_filter))
             split_params = {'strategy': split_strategy, 'lifespan': split_lifespan,
                             'points': points_in_single_pointcloud, 'jump': offset_points_between_frames}
             if want_to_draw_events:
-                shape_hash = str(out_shape[0]) + '-' + str(out_shape[1])
 
                 draw_result_path = join(working_dir,
                                         f'draw_{result_path.split("/")[-1]}_{filter_local_hash}.png')
-                sup_title = f'{method}_mfcc trained on: {filter} -> visualization filter: {filter_local}'
+                sup_title = f'{method}_mfcc trained on: {tsne_label_filter} -> visualization filter: {draw_label_filter}'
                 number_of_subjects = len(set([event.subject for event in vis_events]))
                 out_shape = (number_of_subjects, draw_how_many_columns)
 
                 metrics_result_path = draw_result_path[:-4] + '_metrics.png'
+
                 draw_metrics(metrics_result_path, events=vis_events, converters=converters, split_params=split_params,
                              out_shape=out_shape, drawing_subsamples=drawing_subsamples,
                              sup_title=sup_title, validation=validation)
@@ -181,6 +187,7 @@ class TsneMfcc(Chain):
                 if separate_subjects:
                     for subject in converters.keys():
                         params['separate_subject'] = subject
+                        params['prepare_video'] = True
                         path_from_params = '_'.join([f'{key}_{value}'
                                                      for key, value in params.items()]
                                                     ).replace('/', '_')
@@ -189,6 +196,9 @@ class TsneMfcc(Chain):
                         animate_language_change(events=subject_events, converters=converters,
                                                 animated_result_path=animated_result_path,
                                                 split_params=split_params, **params)
+                        out_path = join(working_dir, f'merged_input_experiment_{filter_local_hash}') + suffix
+                        merged_input_video_and_tsne_events(events=subject_events,
+                                                           out_path=out_path,)
                 else:
                     path_from_params = '_'.join([f'{key}_{value}'
                                                  for key, value in params.items()]).replace('/', '_')

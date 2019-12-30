@@ -44,8 +44,8 @@ class _CheckIfDone:
     def __call__(self, *args, **kwargs):
         if not self.check_path:
             self.check_path = kwargs.get('check_path')
-            if not self.check_path:
-                logger.warning(f'check_path not provided')
+        if not self.check_path:
+            logger.warning(f'check_path not provided')
 
         if self.check_path and isfile(self.done_path()) and not self.ignore_done:
             with open(self.done_path(), 'r') as f:
@@ -70,8 +70,12 @@ def check_if_already_done(check_path=None, validator=None, ignore_done=False):
     """
     This logic assumes check_path is provided or given in kwargs of the function being wrapped around
     :param check_path: if it is None then wrapper function parameter is expected to have such a keyword param
-    :param validator:
-    :param ignore_done:
+    :param validator: None or functor that is expected that accepts single parameter
+                      (return value of the function to be validated)
+                      and returns value that can be converted to boolean indicating
+                      if the call is validate or not
+    :param ignore_done: if set to True, will always run the function
+                        irrespectively if the result is already stored in check_path
     :return:
     """
     def wrapper(function):

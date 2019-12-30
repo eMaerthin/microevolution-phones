@@ -135,4 +135,7 @@ class ChainRunner(object):
             logger.error(f'Value error: {e}')
 
     def process_mfcc_chains(self):
-        self.process_chains({'Mfcc'})
+        self.process_chains(filter_set={'Mfcc'}, filter_function='include')
+
+    def process_new_chains(self):
+        self.process_chains(filter_set={'Spectrogram', 'Formants', 'Global'}, filter_function='exclude')

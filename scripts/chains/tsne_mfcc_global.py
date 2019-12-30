@@ -4,15 +4,14 @@ from os.path import join
 
 import pandas as pd
 
-from chains.tsne_mfcc import TsneMfcc
 from chains.mfcc_global import MfccGlobal
+from chains.tsne_mfcc import TsneMfcc
 from schemas import *
 logger = logging.getLogger()
 
 
 class TsneMfccGlobal(TsneMfcc):
     abstract_class = False
-
     requirements = [MfccGlobal]
 
     @staticmethod
@@ -54,8 +53,8 @@ class TsneMfccGlobal(TsneMfcc):
             return True
 
     @staticmethod
-    def labels_timestamps_from_df(df, published_timestamp):
+    def labels_timestamps_from_df(df, published_timestamp, winstep=0.01):
         labels = [None for _ in df.i.values]
         # TODO this has to be fixed, target implementation should take into account sampling rate
-        timestamps = [published_timestamp + delta for delta in df.i.values]
+        timestamps = [published_timestamp + delta*winstep for delta in df.i.values]
         return labels, timestamps

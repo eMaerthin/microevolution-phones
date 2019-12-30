@@ -182,23 +182,27 @@ def download_youtube_url(url, datatype, output_path_pattern, lang_code):
             logger.error(f'Attribute error: {e} - Will abandon downloading captions')
 
 
-def time_string_to_sec(str):
-    time_parts = str.split(':') # we expect to see something like HH:MM:SS.XYZ
+def time_token_to_sec(time_token):
+    if isinstance(time_token, float):
+        return time_token
+    elif not isinstance(time_token, str):
+        raise ValueError("Don't know how to interpret provided time_token")
+    time_parts = time_token.split(':') # we expect to see something like HH:MM:SS.XYZ
     assert(0 <= len(time_parts) <= 3)
     sec_time = sum(pow(60,i) * float(t)
                    for i,t in enumerate(reversed(time_parts)))
     return sec_time
 
 
-def map_time_string(str_time, rec_time, intro, outro):
+def map_time(time_token, rec_time, intro, outro):
     begin = intro
     end = rec_time - outro
-    if str_time is 'begin':
+    if time_token is 'begin':
         return begin
-    elif str_time is 'end':
+    elif time_token is 'end':
         return end
     else:
-        sec_time = time_string_to_sec(str_time)
+        sec_time = time_token_to_sec(time_token)
         assert begin <= sec_time, f'{sec_time} should be larger than {begin}'
         assert sec_time <= end, f'{sec_time} should be smaller than {end}'
         return sec_time
@@ -209,7 +213,7 @@ def parse_segment(segment, rec_time, intro, outro):
     assert 'stop' in segment
     assert len(segment) is 2
     # pydub does things in milliseconds
-    mapped_segment = {k: 1000 * map_time_string(v, rec_time, intro, outro)
+    mapped_segment = {k: 1000 * map_time(v, rec_time, intro, outro)
                       for k, v in segment.items()}
     return mapped_segment
 
@@ -237,6 +241,27 @@ def audio_and_segment_paths(in_audio_path, use_original_frequency, audio_format=
     return audio_path, segments_path
 
 
+def load_recording(audio_path):
+    audio_format = audio_path.split('.')[-1]
+    if audio_format == 'wav':
+        return AudioSegment.from_wav(audio_path)
+    return AudioSegment.from_file(audio_path)
+
+
+def filter_segments(audio_path, segments_path, segments, intro_duration, outro_duration, silence_duration=0):
+    recording = load_recording(audio_path)
+    recording_time = recording.duration_seconds
+    parsed_segments = [parse_segment(segment, recording_time,
+                                     intro_duration, outro_duration)
+                       for segment in segments]
+    silence = AudioSegment.empty()
+    if silence_duration > 0:
+        silence = AudioSegment.silent(duration=silence_duration)
+    filtered_rec = reduce(lambda x, y: x + recording[y['start']:y['stop']] + silence,
+                          parsed_segments, AudioSegment.empty())
+    filtered_rec.export(segments_path, format='wav')
+
+
 def prepare_wav_input(audio_path, datatype, segments, intro_duration,
                       outro_duration, need_full_length=False):
 
@@ -248,22 +273,9 @@ def prepare_wav_input(audio_path, datatype, segments, intro_duration,
             convert_check_path = segments_path
 
         @check_if_already_done(segments_path)
-        def filter_segments(audio_path, segments_path, segments):
-            recording = None
-            audio_format = audio_path.split('.')[-1]
-            if audio_format == 'wav':
-                recording = AudioSegment.from_wav(audio_path)
-            else:
-                recording = AudioSegment.from_file(audio_path)
+        def wrapped_filter_segments(audio_path, segments_path, segments):
+            filter_segments(audio_path, segments_path, segments, intro_duration, outro_duration)
 
-            recording_time = recording.duration_seconds
-            parsed_segments = [parse_segment(segment, recording_time,
-                                             intro_duration, outro_duration)
-                               for segment in segments]
-            empty = AudioSegment.empty()
-            filtered_rec = reduce(lambda x, y: x + recording[y['start']:y['stop']],
-                                  parsed_segments, empty)
-            filtered_rec.export(segments_path, format='wav')
 
         @check_if_already_done(convert_check_path)
         def convert(audio_path, wav_path, segments_path, segments, original_freq):
@@ -281,5 +293,3 @@ def prepare_wav_input(audio_path, datatype, segments, intro_duration,
 
     for original_freq in (True, False):
         convert_to_wav(audio_path, datatype, segments, original_freq, need_full_length)
-
-
